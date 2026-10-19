@@ -1,0 +1,10 @@
+{
+  "schema_version": 1,
+  "repos": [],
+  "skip_filenames": [],
+  "provenance_fields": ["trust_tier", "source_url", "captured_at"],
+  "trace": {
+    "task_id_env": "SCOPED_KB_TASK_ID",
+    "session_id_env": ["SCOPED_KB_SESSION_ID"]
+  }
+}

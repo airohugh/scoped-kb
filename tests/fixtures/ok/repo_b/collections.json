@@ -1,0 +1,14 @@
+{
+  "schema_version": 1,
+  "repo_id": "repo_b",
+  "repo_root": "__FIXTURE_BASE__/repo_b",
+  "collections": [
+    {
+      "collection_id": "b-notes",
+      "roots": ["notes"],
+      "excludes": ["raw"],
+      "kind_default": "note",
+      "resolution_default": "document"
+    }
+  ]
+}

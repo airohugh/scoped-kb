@@ -1,0 +1,18 @@
+{
+  "domains": ["reading", "cooking", "shared", "archive", "unreviewed"],
+  "files": {
+    "reading/tidy-log-1.md":     {"domain": "reading",    "visible_to": ["reading"]},
+    "reading/tidy-log-2.md":     {"domain": "reading",    "visible_to": ["reading"]},
+    "reading/tidy-log-3.md":     {"domain": "reading",    "visible_to": ["reading"]},
+    "cooking/tidy-log-1.md":     {"domain": "cooking",    "visible_to": ["cooking"]},
+    "cooking/tidy-log-2.md":     {"domain": "cooking",    "visible_to": ["cooking"]},
+    "cooking/tidy-log-3.md":     {"domain": "cooking",    "visible_to": ["cooking"]},
+    "common/common-rule-1.md":        {"domain": "shared",     "visible_to": ["reading", "cooking"]},
+    "common/common-rule-2.md":        {"domain": "shared",     "visible_to": ["reading", "cooking"]},
+    "archive/archive-1.md":           {"domain": "archive",    "visible_to": []},
+    "archive/archive-2.md":           {"domain": "archive",    "visible_to": []},
+    "inbox/inbox-confirmed-1.md":     {"domain": "reading",    "visible_to": ["reading"]},
+    "inbox/inbox-unreviewed-1.md":    {"domain": "unreviewed", "visible_to": []},
+    "inbox/inbox-unreviewed-2.md":    {"domain": "unreviewed", "visible_to": []}
+  }
+}

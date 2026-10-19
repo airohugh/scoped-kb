@@ -1,0 +1,17 @@
+{
+  "schema_version": 1,
+  "repo_id": "canaryrepo",
+  "repo_root": "__FIXTURE_BASE__",
+  "collections": [
+    {"collection_id": "canary-reading", "roots": ["reading"], "excludes": [],
+     "kind_default": "note", "resolution_default": "document"},
+    {"collection_id": "canary-cooking", "roots": ["cooking"], "excludes": [],
+     "kind_default": "note", "resolution_default": "document"},
+    {"collection_id": "canary-common", "roots": ["common"], "excludes": [],
+     "kind_default": "reference", "resolution_default": "claim"},
+    {"collection_id": "canary-archive", "roots": ["archive"], "excludes": [],
+     "kind_default": "note", "resolution_default": "document"},
+    {"collection_id": "canary-inbox", "roots": ["inbox"], "excludes": [],
+     "kind_default": "note", "resolution_default": "document"}
+  ]
+}

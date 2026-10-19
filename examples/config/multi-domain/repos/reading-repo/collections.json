@@ -1,0 +1,14 @@
+{
+  "schema_version": 1,
+  "repo_id": "reading-repo",
+  "repo_root": "/Users/you/projects/reading-notes",
+  "collections": [
+    {
+      "collection_id": "reading-active",
+      "roots": ["notes"],
+      "excludes": [],
+      "kind_default": "note",
+      "resolution_default": "document"
+    }
+  ]
+}

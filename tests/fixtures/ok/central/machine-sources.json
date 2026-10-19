@@ -1,0 +1,12 @@
+{
+  "schema_version": 1,
+  "collections": [
+    {
+      "collection_id": "m-global",
+      "root": "__FIXTURE_BASE__/machine/global",
+      "excludes": [],
+      "kind_default": "memory",
+      "resolution_default": "claim"
+    }
+  ]
+}

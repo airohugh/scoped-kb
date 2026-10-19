@@ -1,0 +1,14 @@
+{
+  "schema_version": 1,
+  "repo_id": "cooking-repo",
+  "repo_root": "/Users/you/projects/cooking-notes",
+  "collections": [
+    {
+      "collection_id": "cooking-active",
+      "roots": ["notes"],
+      "excludes": ["drafts"],
+      "kind_default": "note",
+      "resolution_default": "document"
+    }
+  ]
+}

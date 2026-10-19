@@ -1,0 +1,12 @@
+{
+  "schema_version": 1,
+  "collections": [
+    {
+      "collection_id": "notes",
+      "root": "/Users/you/notes",
+      "excludes": [],
+      "kind_default": "note",
+      "resolution_default": "document"
+    }
+  ]
+}

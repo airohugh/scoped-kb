@@ -1,0 +1,12 @@
+{
+  "schema_version": 1,
+  "collections": [
+    {
+      "collection_id": "inbox",
+      "root": "/Users/you/Inbox",
+      "excludes": [],
+      "kind_default": "raw",
+      "resolution_default": "claim"
+    }
+  ]
+}

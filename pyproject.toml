@@ -1,0 +1,27 @@
+[build-system]
+requires = ["setuptools>=61"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "scoped-kb"
+version = "0.0.0"
+description = "Scoped local knowledge base: chunked markdown notes + pgvector search, with per-domain access scopes."
+license = { text = "MIT" }
+requires-python = ">=3.9"
+dependencies = [
+    "psycopg2-binary",
+    "platformdirs>=3",
+]
+
+[project.scripts]
+scoped-kb = "scoped_kb.cli:main"
+
+[project.optional-dependencies]
+test = ["pytest"]
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["src"]

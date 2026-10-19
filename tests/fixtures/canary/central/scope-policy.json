@@ -1,0 +1,45 @@
+{
+  "schema_version": 1,
+  "repo_roots": {
+    "__FIXTURE_BASE__/reading": "reading",
+    "__FIXTURE_BASE__/cooking": "cooking"
+  },
+  "collections": {
+    "canary-reading": {"owner_repo": "canaryrepo", "scope": "reading",
+                       "authority": "authority", "index_policy": "active",
+                       "fingerprint": "__AUTO__"},
+    "canary-cooking": {"owner_repo": "canaryrepo", "scope": "cooking",
+                       "authority": "authority", "index_policy": "active",
+                       "fingerprint": "__AUTO__"},
+    "canary-common":  {"owner_repo": "canaryrepo", "scope": "shared",
+                       "authority": "authority", "index_policy": "active",
+                       "fingerprint": "__AUTO__"},
+    "canary-archive": {"owner_repo": "canaryrepo", "scope": "archive",
+                       "authority": "authority", "index_policy": "active",
+                       "fingerprint": "__AUTO__"},
+    "canary-inbox":   {"owner_repo": "canaryrepo", "scope": "inbox",
+                       "authority": "authority", "index_policy": "confirmed_manifest",
+                       "fingerprint": "__AUTO__"}
+  },
+  "manifest_partitions": {
+    "canary-inbox": {
+      "default_partition": "canary-inbox-held",
+      "partitions": {
+        "canary-inbox-reading": {"scope": "reading", "index_policy": "active"},
+        "canary-inbox-held": {
+          "scope": "unreviewed", "index_policy": "quarantine",
+          "quarantine_reason": "imported, not yet read by a person",
+          "exit_path": "a person reads the note, then assigns it to a partition in assignments"}
+      },
+      "assignments": {"inbox-confirmed-1.md": "canary-inbox-reading"}
+    }
+  },
+  "profiles": {
+    "reading": ["canary-reading", "canary-common", "canary-inbox-reading"],
+    "cooking": ["canary-cooking", "canary-common"]
+  },
+  "cross_allowlist": [
+    {"base": "reading", "include": ["cooking"]},
+    {"base": "cooking", "include": ["reading"]}
+  ]
+}

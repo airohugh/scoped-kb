@@ -1,0 +1,60 @@
+{
+  "schema_version": 1,
+  "repo_roots": {
+    "/Users/you/projects/cooking-notes": "cooking",
+    "/Users/you/projects/reading-notes": "reading"
+  },
+  "collections": {
+    "cooking-active": {
+      "owner_repo": "cooking-repo",
+      "scope": "cooking",
+      "authority": "authority",
+      "index_policy": "active",
+      "fingerprint": "RECOMPUTE —— 用 `scoped-kb registry --fingerprints` 现算"
+    },
+    "reading-active": {
+      "owner_repo": "reading-repo",
+      "scope": "reading",
+      "authority": "authority",
+      "index_policy": "active",
+      "fingerprint": "RECOMPUTE —— 用 `scoped-kb registry --fingerprints` 现算"
+    },
+    "inbox": {
+      "owner_repo": "machine",
+      "scope": "unclassified",
+      "authority": "authority",
+      "index_policy": "confirmed_manifest",
+      "fingerprint": "RECOMPUTE —— 用 `scoped-kb registry --fingerprints` 现算"
+    }
+  },
+  "manifest_partitions": {
+    "inbox": {
+      "default_partition": "inbox-quarantine",
+      "partitions": {
+        "inbox-cooking": {
+          "scope": "cooking",
+          "index_policy": "active"
+        },
+        "inbox-quarantine": {
+          "scope": "unclassified",
+          "index_policy": "quarantine",
+          "quarantine_reason": "刚收进 inbox，还没人工确认归属哪个域",
+          "exit_path": "人工看过内容后，把它的相对路径写进 assignments，指派给 inbox-cooking（指派给 inbox 本身的话，还要在某个 profile 里加上 inbox 才检索得到）"
+        }
+      },
+      "assignments": {
+        "slow-cooker-tips.md": "inbox-cooking"
+      }
+    }
+  },
+  "profiles": {
+    "cooking": ["cooking-active", "inbox-cooking"],
+    "reading": ["reading-active"]
+  },
+  "cross_allowlist": [
+    {
+      "base": "cooking",
+      "include": ["reading"]
+    }
+  ]
+}

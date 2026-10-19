@@ -1,0 +1,20 @@
+{
+  "schema_version": 1,
+  "default_profile": "default",
+  "repo_roots": {
+    "/Users/you/notes": "default"
+  },
+  "collections": {
+    "notes": {
+      "owner_repo": "machine",
+      "scope": "default",
+      "authority": "authority",
+      "index_policy": "active",
+      "fingerprint": "RECOMPUTE —— init 会用 scoped_kb.registry.print_fingerprints 现算这一行，不是写死的常量"
+    }
+  },
+  "profiles": {
+    "default": ["notes"]
+  },
+  "cross_allowlist": []
+}

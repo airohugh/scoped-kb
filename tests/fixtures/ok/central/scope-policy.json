@@ -1,0 +1,76 @@
+{
+  "schema_version": 1,
+  "repo_roots": {
+    "__FIXTURE_BASE__/repo_a": "work",
+    "__FIXTURE_BASE__/repo_b": "research"
+  },
+  "collections": {
+    "a-decisions": {
+      "owner_repo": "repo_a",
+      "scope": "work",
+      "authority": "authority",
+      "index_policy": "active",
+      "fingerprint": "__AUTO__"
+    },
+    "b-notes": {
+      "owner_repo": "repo_b",
+      "scope": "research",
+      "authority": "authority",
+      "index_policy": "active",
+      "fingerprint": "__AUTO__"
+    },
+    "m-global": {
+      "owner_repo": "machine",
+      "scope": "global",
+      "authority": "authority",
+      "index_policy": "confirmed_manifest",
+      "fingerprint": "__AUTO__"
+    }
+  },
+  "manifest_partitions": {
+    "m-global": {
+      "default_partition": "m-global-unresolved",
+      "partitions": {
+        "m-global-work": {
+          "scope": "work",
+          "index_policy": "active"
+        },
+        "m-global-unresolved": {
+          "scope": "unclassified",
+          "index_policy": "quarantine",
+          "quarantine_reason": "unresolved-mixed",
+          "exit_path": "人工 review 后改写 assignments，转入 m-global 或 m-global-work"
+        }
+      },
+      "assignments": {
+        "confirmed.md": "m-global",
+        "mixed_work.md": "m-global-work"
+      }
+    }
+  },
+  "profiles": {
+    "work": [
+      "a-decisions",
+      "m-global",
+      "m-global-work"
+    ],
+    "research": [
+      "b-notes",
+      "m-global"
+    ]
+  },
+  "cross_allowlist": [
+    {
+      "base": "work",
+      "include": [
+        "research"
+      ]
+    },
+    {
+      "base": "research",
+      "include": [
+        "work"
+      ]
+    }
+  ]
+}

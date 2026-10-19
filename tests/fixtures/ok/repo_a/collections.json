@@ -1,0 +1,14 @@
+{
+  "schema_version": 1,
+  "repo_id": "repo_a",
+  "repo_root": "__FIXTURE_BASE__/repo_a",
+  "collections": [
+    {
+      "collection_id": "a-decisions",
+      "roots": ["docs/decisions"],
+      "excludes": [],
+      "kind_default": "decision",
+      "resolution_default": "claim"
+    }
+  ]
+}
