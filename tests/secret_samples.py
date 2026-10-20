@@ -164,11 +164,22 @@ POSITIVES = [
     ("assignment", "| password | " + "Ld8s" + _rnd(12, 109) + " |"),
     ("assignment", "签名密钥=" + _rnd(20, 125)),
     ("assignment", "password=" + _rnd(12, 126, "ABCDEFGHIJKLMNOPQRSTUVWXYZ")),
+    # ---- 第三批：第二轮复核报出的漏检形态 ----
+    ("assignment", "password=get_token()" + _rnd(16, 130)),
+    ("assignment", "password=\"get_token()" + _rnd(16, 131) + "\""),
+    ("assignment", "password:\n  " + _rnd(16, 132)),
+    ("assignment", "{\n  \"password\":\n    \"" + _rnd(18, 133) + "\"\n}"),
+    ("assignment", "password=\"a'" + _rnd(14, 134) + "\""),
+    ("assignment", "password='x\"" + _rnd(14, 135) + "'"),
+    ("assignment", "password: `a'" + _rnd(14, 136) + "`"),
+    ("assignment", "password=/" + "Kq7x" + _rnd(10, 137)),
+    ("assignment", "api_key: https://api.example.com/v1?key=" + _rnd(24, 138)),
     # ---- cli_flag ----
     ("cli_flag", "mysql -u app --password " + "Tg5n" + _rnd(10, 110) + " shop"),
     ("cli_flag", "tool --api-key " + _rnd(24, 111) + " --verbose"),
     ("cli_flag", "deploy --token '" + _rnd(20, 112) + "'"),
     ("cli_flag", "backup --secret \"" + "Wq3!" + _rnd(10, 113) + "\""),
+    ("cli_flag", "deploy --token \"a'" + _rnd(16, 139) + "\""),
     # ---- auth_header ----
     ("auth_header", "Authorization: Bear" + "er " + _rnd(32, 114)),
     ("auth_header", "Authorization: Bas" + "ic " + base64.b64encode(("alice:" + _rnd(12, 115)).encode()).decode()),
@@ -180,6 +191,12 @@ POSITIVES = [
     ("api_token_prefix", "refresh token " + _gh + "r_" + _rnd(36, 120)),
     ("api_token_prefix", "mail key " + "S" + "G." + _rnd(22, 121, _URLSAFE) + "." + _rnd(43, 122, _URLSAFE)),
     ("api_token_prefix", "bot " + _rnd(10, 123, _DIGITS) + ":" + "AA" + _rnd(33, 124, _URLSAFE)),
+    ("api_token_prefix", "legacy app token " + "xo" + "xa-" + _rnd(12, 140, _DIGITS) + "-" + _rnd(24, 141)),
+    ("api_token_prefix", "workspace token " + "xo" + "xo-" + _rnd(12, 142, _DIGITS) + "-" + _rnd(24, 143)),
+    ("api_token_prefix", "refresh " + "xo" + "xr-" + _rnd(12, 144, _DIGITS) + "-" + _rnd(24, 145)),
+    ("api_token_prefix", "session " + "xo" + "xs-" + _rnd(12, 146, _DIGITS) + "-" + _rnd(24, 147)),
+    ("api_token_prefix", "test-mode key " + "sk_" + "test_" + _rnd(24, 148)),
+    ("api_token_prefix", "restricted test key " + "rk_" + "test_" + _rnd(24, 149)),
 ]
 
 NEGATIVES = [
@@ -256,4 +273,15 @@ NEGATIVES = [
     ("auth header shell var", "Authorization: Bearer $TOKEN"),
     ("cli flag file", "mysql --password-file /run/secrets/db"),
     ("cli flag without value", "./run --verbose --token"),
+    # ---- 第三批：第二轮复核报出的误报形态 ----
+    ("cli boolean flag then option", "curl --anyauth --location https://example.com"),
+    ("cli negated flag then option", "psql --no-password --dbname=demo"),
+    ("cli negated flag then argument", "psql --no-password analytics2024"),
+    ("auth header placeholder upper", "Authorization: Bearer YOUR_API_KEY"),
+    ("auth header masked", "Authorization: Bearer xxxxxxxxxxxx"),
+    ("auth header code ref", "Authorization: Bearer process.env.API_KEY"),
+    ("quoted chinese narrative", "password: \"请联系管理员获取临时账号与初始口令\""),
+    ("single-quoted chinese narrative", "password: '请联系管理员获取临时口令和账号'"),
+    ("yaml nested key on next line", "credentials:\n  username: alice"),
+    ("heading then prose on next line", "Password:\nRemember to rotate it every quarter."),
 ]

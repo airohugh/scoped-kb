@@ -40,7 +40,12 @@ from scoped_kb.search import (
     retrieve_candidates,
     select_for_pack,
 )
-from scoped_kb.secret_guard import SECRET_GUARD_EXIT, SECRET_LABELS, scan_secrets
+from scoped_kb.secret_guard import (
+    SECRET_GUARD_EXIT,
+    SECRET_LABELS,
+    looks_sensitive,
+    scan_secrets,
+)
 
 # init 写出的单域配置的固定名字与文件清单
 INIT_COLLECTION = "notes"
@@ -396,6 +401,7 @@ def cmd_pack(args):
         phase = "交付"
         if args.out:
             Path(args.out).write_text(pkg, encoding="utf-8")
+            phase = "已交付"
             print(f"已写入 {args.out}（{len(picked)} 片段 / {len(files)} 文件 / {used} 字）",
                   file=sys.stderr)
         else:
@@ -433,11 +439,12 @@ def cmd_pack(args):
 def _pack_source_of(spans, line_no):
     """命中行属于包里的哪个片段，按渲染时记下的行区间查，不解析包的正文。
 
-    位置键来自索引而非正文；它本身若带疑似凭据（文件名里写了密钥），也不打出来。
+    位置键来自索引而非正文；文件名里可能写着密钥，所以只要带关键词、`=`、`:`
+    或有任何命中就不打出来（looks_sensitive），不靠扫描零命中放行。
     """
     for first, last, i, key in spans:
         if first <= line_no <= last:
-            shown = "路径含疑似凭据，已隐去" if scan_secrets(key) else key
+            shown = "路径可能含凭据，已隐去" if looks_sensitive(key) else key
             return f"（片段 {i}：{shown}）"
     return "（包头：任务描述或说明）"
 

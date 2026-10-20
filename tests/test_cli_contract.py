@@ -1196,3 +1196,31 @@ def test_pack_report_hides_location_key_that_looks_like_a_secret():
     assert cli._pack_source_of([(10, 20, 2, "repo_a/notes/ok.md")], 15) == \
         "（片段 2：repo_a/notes/ok.md）"
     assert "包头" in cli._pack_source_of([(10, 20, 2, key)], 3)
+
+
+def test_pack_report_hides_location_key_with_secret_shaped_like_attribute():
+    """文件名「password=<小写字母数字>.md」会被扫描当成属性引用放过；报告仍不得打出它。"""
+    key = "repo/notes/password=" + "kq7x" + "9mp2lm4zr8.md"
+    assert "kq7x9" not in cli._pack_source_of([(1, 9, 1, key)], 5)
+
+
+def test_cmd_pack_notice_failure_after_file_write_keeps_single_ok(cross_search, tmp_path,
+                                                                   monkeypatch):
+    """文件已写出后，「已写入」提示写失败不算交付失败。"""
+
+    class _BoomErr:
+        def write(self, text):
+            if "已写入" in text:
+                raise BrokenPipeError
+            return len(text)
+
+        def flush(self):
+            pass
+
+    monkeypatch.setattr(sys, "stderr", _BoomErr())
+    target = tmp_path / "ctx.md"
+    with pytest.raises(BrokenPipeError):
+        cli.cmd_pack(_pack_args(out=str(target)))
+    assert target.exists()
+    (line,) = _cross_log_lines()
+    assert line["outcome"] == "ok"
