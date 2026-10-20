@@ -80,7 +80,6 @@ _P_DOTTED = re.compile(r"^(?:" + _IDENT + r"\.)+" + _IDENT + r"$")       # setti
 _P_SNAKE_WORDS = re.compile(r"^[a-z]+(?:[_\-][a-z]+)+$")                  # your_api_key_here
 
 _VALUE_NOISE = (
-    re.compile(r"^\$\{[^{}]+\}$"),                                   # ${DB_PASSWORD}
     _P_SHELL_VAR,
     re.compile(r"^<[^<>]+>$"),                                       # <your-token>
     re.compile(r"^\{\{?\s*[A-Za-z_][\w.]*\s*\}\}?$"),                # {API_TOKEN} / {{ x }}
@@ -127,6 +126,10 @@ def _mask(s):
 
 _SECRET_GROUPS = ("qd", "qs", "qb", "val", "nqd", "nqs", "nval")
 
+# shell 参数展开 ${NAME}、${NAME:-默认值}、${NAME:?提示}。整体是占位，不往里面回扫
+# （否则「DB_PASSWORD:」会被当成新的赋值）；只有 :- / := 给出的默认值要单独判断。
+_SHELL_EXPANSION = re.compile(r"^\$\{(?P<name>[^{}]+?)(?::?(?P<op>[-=?+])(?P<default>[^{}]*))?\}$")
+
 
 def scan_secrets(text):
     """扫描 text，返回按出现位置排序的 SecretHit 列表；没有命中返回空列表。
@@ -145,13 +148,26 @@ def scan_secrets(text):
             groups = m.groupdict()
             g = next((g for g in _SECRET_GROUPS if groups.get(g)), None)
             secret = groups[g] if g else m.group(0)
-            excluded = (rule in ("assignment", "cli_flag") and (
+            end = m.end()
+            if g and secret.startswith("${") and "}" not in secret:
+                # 未加引号的值在空白处就断了：「${NAME:?请先设置 NAME}」要取到同一行的右花括号
+                close, eol = text.find("}", m.start(g)), text.find("\n", m.start(g))
+                if close != -1 and (eol == -1 or close < eol):
+                    secret, end = text[m.start(g):close + 1], close + 1
+            sh = _SHELL_EXPANSION.match(secret) if rule in ("assignment", "cli_flag") else None
+            if sh:
+                default = sh.group("default") or ""
+                if sh.group("op") not in ("-", "=") or len(default) < 8 or _is_value_noise(default):
+                    pos = end
+                    continue
+                secret = default
+            excluded = not sh and (rule in ("assignment", "cli_flag") and (
                             _KEY_NOISE.search(groups["key"]) or _is_value_noise(secret))) or \
                        (rule == "auth_header" and _is_value_noise(secret, _AUTH_NOISE))
             if excluded:
                 pos = max(m.start() + 1, m.start(g) if g else 0)
                 continue
-            pos = m.end()
+            pos = end
             preview = "PEM 私钥头" if rule == "private_key" else _mask(secret)
             hits.append((m.start(), SecretHit(rule, text.count("\n", 0, m.start()) + 1, preview)))
     hits.sort(key=lambda x: x[0])

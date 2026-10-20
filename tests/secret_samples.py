@@ -163,6 +163,7 @@ POSITIVES = [
     ("assignment", "password=\"blue " + "Pn4k" + _rnd(8, 108) + "\""),
     ("assignment", "| password | " + "Ld8s" + _rnd(12, 109) + " |"),
     ("assignment", "签名密钥=" + _rnd(20, 125)),
+    ("assignment", "路由器管理口令：" + _rnd(12, 174)),
     ("assignment", "password=" + _rnd(12, 126, "ABCDEFGHIJKLMNOPQRSTUVWXYZ")),
     # ---- 第三批：第二轮复核报出的漏检形态 ----
     ("assignment", "password=get_token()" + _rnd(16, 130)),
@@ -194,6 +195,9 @@ POSITIVES = [
     ("assignment", "token_url:\n  'https://app.example.com/cb?access_" + "token=" + _rnd(16, 169) + "'"),
     ("assignment", "token_url: https://api.example.com/v1?api_" + "key=" + _rnd(16, 170)),
     ("assignment", "token: https://app.example.com/cb#" + "key=" + _rnd(16, 171)),
+    # ---- 第七批：第六轮复核报出的形态（shell 参数展开的默认值）----
+    ("assignment", "password: ${DB_PASSWORD:-" + _rnd(16, 172) + "}"),
+    ("assignment", "export API_TOKEN=${API_TOKEN:=" + _rnd(20, 173) + "}"),
     # ---- cli_flag ----
     ("cli_flag", "mysql -u app --password " + "Tg5n" + _rnd(10, 110) + " shop"),
     ("cli_flag", "tool --api-key " + _rnd(24, 111) + " --verbose"),
@@ -314,6 +318,11 @@ NEGATIVES = [
     # ---- 第五批：第四轮复核报出的误报形态 ----
     ("auth header lowercase placeholder", "Authorization: Bearer your_api_key_here"),
     ("auth header lowercase placeholder 2", "curl -H 'Authorization: Bear" + "er your_access_token'"),
+    # ---- 第七批：第六轮复核报出的误报形态 ----
+    ("shell default placeholder", "password: ${DB_PASSWORD:-changeme}"),
+    ("shell required message", "password: ${DB_PASSWORD:?required}"),
+    ("shell required long message", "token: ${API_TOKEN:?set API_TOKEN before running}"),
+    ("shell nested name", "token: ${env:API_TOKEN}"),
     ("yaml nested key on next line", "credentials:\n  username: alice"),
     ("heading then prose on next line", "Password:\nRemember to rotate it every quarter."),
 ]
