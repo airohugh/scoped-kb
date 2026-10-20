@@ -2,7 +2,7 @@
 
 A local knowledge base for markdown notes: chunked indexing, pgvector semantic search, and a two-layer access-scope model for keeping separate note collections separate when more than one agent or project reads from the same machine.
 
-**English summary.** scoped-kb indexes `.md` files (split on `## ` headings, incremental, content-hash deduped) into Postgres+pgvector and searches them with pure vector similarity via an Ollama embedding model (default `bge-m3`). Provenance (`trust_tier` / `source_url` / `captured_at`) lives in each file's YAML frontmatter and is rendered at query time, never embedded. A generation gate refuses to serve search results if the index was built from a different configuration than the one currently in effect — avoiding silently wrong scope boundaries. For single-notebook use, `scoped-kb init <dir>` sets up a minimal single-domain configuration and you're done; a more advanced two-layer scope system (local declarations + central policy, explicit cross-domain allowlists) is available for running several isolated note collections on one machine. See [`docs/design.md`](docs/design.md) for the reasoning, and [Known limitations](#已知限制) below for what this does not do. This is a personal project with no guaranteed response time — see [SECURITY.md](SECURITY.md).
+**English summary.** scoped-kb indexes `.md` files (split on `## ` headings, incremental, content-hash deduped) into Postgres+pgvector and searches them with pure vector similarity via an Ollama embedding model (default `bge-m3`). Provenance (`trust_tier` / `source_url` / `captured_at`) lives in each file's YAML frontmatter and is rendered at query time, never embedded. A generation gate refuses to serve search results if the index was built from a different configuration than the one currently in effect — avoiding silently wrong scope boundaries. `scoped-kb pack` assembles a budgeted, provenance-tagged context bundle for agents that cannot read your files, and refuses to deliver it if a credential scanner flags anything (report-only, never silently redacted; a clean scan is not proof the bundle is clean). For single-notebook use, `scoped-kb init <dir>` sets up a minimal single-domain configuration and you're done; a more advanced two-layer scope system (local declarations + central policy, explicit cross-domain allowlists) is available for running several isolated note collections on one machine. See [`docs/design.md`](docs/design.md) for the reasoning, and [Known limitations](#已知限制) below for what this does not do. This is a personal project with no guaranteed response time — see [SECURITY.md](SECURITY.md).
 
 ---
 
@@ -21,6 +21,7 @@ A local knowledge base for markdown notes: chunked indexing, pgvector semantic s
 - **没有向量索引（HNSW/IVFFlat）**。几千个分块量级一次全表扫描足够快；超过大约一万个分块之后建议自己加索引（`schema.sql` 故意没建，避免在你还没到这个量级时就引入额外的维护成本）。
 - **锁文件用 `fcntl.flock`，不支持 Windows**。本项目只在 macOS / Linux 上验证过。
 - **真实 Ollama 链路没有在 CI 里跑过**——CI 跑 lint 和全部测试（DB 测试连 Postgres 服务容器），embedding 在 CI 里打桩。已实测的组合是「Postgres 走 `compose.yaml` 容器 + Ollama 走宿主机原生安装」；「两个都用容器」这条路径没有完整实测过（容器内 `ollama pull` 在有透明代理的网络下会失败，见下面"容器里拉模型失败怎么办"）。
+- **`pack` 的凭据守卫只认有固定形态的东西**：带厂商前缀的 token、字段名提示的赋值（`password=`、`apiKey:` 等，值至少 8 位）、连接串里的密码、私钥头、JWT、AWS key ID、40 位以上十六进制。没有字段名提示的裸密码、短于 8 位的值，以及看起来像普通词的值（15 位以内的纯小写字母、用 `_` 或 `-` 连起来的小写词、纯大写单词）、带非 ASCII 字符的值，都会漏。扫描零命中不等于这一包干净，粘出去之前自己再看一眼。
 - **分域隔离防的是配置与归属错误，不防拿到笔记目录写权限的本地对手**。详见 [`docs/design.md`](docs/design.md)「威胁模型边界」一节，以及 `chunking.scan` 的 docstring。
 
 ## 依赖
@@ -131,6 +132,8 @@ scoped-kb init <笔记目录> [--force]   # 生成单域配置（首次使用；
 scoped-kb index                        # 增量索引；检测到配置变化会自动全量重建
 scoped-kb search "<问题>" [--limit N] [--json]
                                         # 检索；--json 只输出机器可读 JSON（供脚本/钩子解析）
+scoped-kb pack "<任务描述>" [--limit N] [--budget 字数] [--out 文件] [--force]
+                                        # 按任务打包一份可粘贴给外部 agent 的上下文（带出处、带凭据守卫）
 scoped-kb backfill                     # 补算 embedding 为 NULL 的行（比如换过一次嵌入模型后清空重算）
 scoped-kb status                       # 看索引总共多少文件/分块/已向量化的行，并按 collection 列出分块数
 scoped-kb registry --check             # 只编译校验配置并打印 hash，不连库、不写文件
@@ -140,6 +143,26 @@ scoped-kb registry --activate [--rebuild] [--maintenance-override] [--schema S]
                                         # 显式提交索引世代；对 public 需维护闸存在且同时带 --rebuild 与 --maintenance-override，日常用 index 即可
 ```
 
+### 给不能读文件的 agent 打包：`pack`
+
+网页版或桌面版的 agent 读不到你的笔记目录，只能看到你粘进去的东西。`pack` 按任务检索，挑出一包片段：每个文件先取最相关的一块，预算有剩再补同一文件的其他块，这样覆盖的来源更多。每个片段带一行出处，包头有出处图例。片段标题用位置键（`<仓库 id>/<相对路径>`），不带本机绝对路径。
+
+```bash
+scoped-kb pack "我要改酸种配方，先看看以前记过什么" --out ctx.md   # 写文件
+scoped-kb pack "..." | pbcopy                                       # 或直接进剪贴板（stdout 上只有这一包，横幅和提示都走 stderr）
+```
+
+交付前整包过一遍凭据守卫。检出疑似凭据就中止：不写文件、不打印包，只在 stderr 列出命中的行号、所在片段、规则类别和掩码（报告里不回显凭据原文）。**守卫只报不改**，不会替你脱敏：被悄悄改过的包看起来和没改过的一样，人会以为安全了。先回源文件看清楚，确认是误报（示例值、变量名引用）再加 `--force` 放行。能抓什么、会漏什么，见上面「已知限制」。
+
+退出码：
+
+| 码 | 含义 |
+|---|---|
+| 0 | 成功，或没有命中（没有命中不算错误） |
+| 2 | 参数用法错误（argparse） |
+| 3 | 作用域或世代校验失败（`search` 同样用这个码） |
+| 4 | 凭据守卫中止 |
+
 ### 多域与跨域（进阶）
 
 单域用户用不到这一节。如果你要在同一台机器上维护几个互不默认可读的笔记域（比如工作笔记和个人阅读笔记各自归一个 agent），照 [`examples/config/multi-domain/`](examples/config/multi-domain/) 的结构手写配置，写完用 `scoped-kb registry --fingerprints` 算出真实指纹填进 `scope-policy.json`。
@@ -148,6 +171,7 @@ scoped-kb registry --activate [--rebuild] [--maintenance-override] [--schema S]
 
 ```bash
 scoped-kb search "问题" --profile cross --include <另一个域> --why "为什么需要跨域"
+scoped-kb pack "任务" --profile cross --include <另一个域> --why "为什么需要跨域"
 ```
 
 这会要求环境里存在可追溯的任务/会话 ID（变量名见上面环境变量表），缺失就拒绝执行而不是留空记录。为什么要这么麻烦，见 [`docs/design.md`](docs/design.md) 的"为什么分两层 scope"一节。

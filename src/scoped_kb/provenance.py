@@ -19,7 +19,7 @@ from scoped_kb import registry
 PROVENANCE_PREFIX = "> 出处："
 
 
-# 留给计划中的 pack（尚未实现）。token 成本约束：出处开销占到预算这一比例以上，就把 source_url 降级成域名。
+# pack 的 token 成本约束：出处开销占到预算这一比例以上，就把 source_url 降级成域名。
 # 为什么不按「单行超 N 字就降级」：长链接普遍让单行超 90 字，那等于**默认**降级，
 # 而域名回不到原文——图例偏偏要求「引用前回源文件与 source_url 核对」，自相矛盾。
 # 0.10 取「出处开销占 5–10% 可接受」的上界。
@@ -138,3 +138,24 @@ def provenance_line(file_path, collection_id, reg=None, compact=False):
         # 不留空、不猜。
         line = "未标注 —— 回源文件核实"
     return PROVENANCE_PREFIX + line
+
+
+def render_pack(task, picked, used, files, reg=None, budget=None):
+    """把选出的片段渲染成可粘贴的 markdown。**生产渲染逻辑。**
+
+    片段标题用位置键（`<owner>/<相对路径>`），不用绝对路径：这一包是要粘给
+    外部 agent 的，绝对路径会把本机目录结构一起送出去。
+    reg 可选：拿不到 registry 就降级成「只报 frontmatter 里有的」，不崩、不猜归属。
+    budget 给了才做降级判断；不给就按完整 source_url 渲染。
+    """
+    lines = [provenance_line(fp, cid, reg) for fp, _c, cid, _s in picked]
+    if budget and sum(len(x) for x in lines) > budget * PROVENANCE_BUDGET_SHARE:
+        lines = [provenance_line(fp, cid, reg, compact=True) for fp, _c, cid, _s in picked]
+    body = "\n\n".join(
+        f"### 来源 {i}：`{fp}`　（相关度 {sim:.3f}）\n{line}\n\n{content}"
+        for i, ((fp, content, _cid, sim), line) in enumerate(zip(picked, lines), 1))
+    return (f"# 任务上下文包\n\n**任务：** {task}\n\n"
+            f"**这一包是按任务从知识库检索出来的 {len(picked)} 个片段"
+            f"（{len(files)} 个文件、{used} 字），不是全部资料。** "
+            f"引用的结论请回源文件核实。\n\n"
+            f"{PROVENANCE_LEGEND}\n\n---\n\n{body}\n")

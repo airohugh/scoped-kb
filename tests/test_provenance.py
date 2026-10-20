@@ -1,7 +1,7 @@
 """出处进**呈现层**，不进 embedding。
 
 核心不变量：这里加的任何东西都**不得进 knowledge_index.content**——出处只在
-cmd_search（以及尚未实现的 pack）的输出里出现，因此对排序零影响。
+cmd_search 与 pack 的输出里出现，因此对排序零影响。
 """
 import inspect
 import json
@@ -175,7 +175,6 @@ def test_compact_degrades_url_to_domain_only(tmp_path, reg_author):
     assert "Jane Doe" in line and "2026-08-05" in line
 
 
-@pytest.mark.skip(reason="pack is not implemented yet")
 def test_render_pack_degrades_only_when_over_budget(tmp_path, reg):
     """token 成本约束：出处开销占到预算 10% 以上才降级。"""
     url = _external(tmp_path)
@@ -191,7 +190,6 @@ def test_render_pack_degrades_only_when_over_budget(tmp_path, reg):
 
 # ---- 装进包 --------------------------------------------------------------
 
-@pytest.mark.skip(reason="pack is not implemented yet")
 def test_render_pack_carries_legend_and_one_line_per_fragment(tmp_path, reg):
     """外部 agent 不知道目录约定，所以图例必须在包头，出处必须逐片段跟着。"""
     _write(tmp_path, "s.md", "---\ntrust_tier: T3\nsource_author: Jane Doe\n"
@@ -211,7 +209,6 @@ def test_render_pack_carries_legend_and_one_line_per_fragment(tmp_path, reg):
     assert "status" not in pkg and "inbox" not in pkg
 
 
-@pytest.mark.skip(reason="pack is not implemented yet")
 def test_render_pack_without_registry_still_renders(reg):
     """canary 等场景不传 registry：允许降级，但不得崩。"""
     picked = [("t/a.md", "x" * 80, "canary-work", 0.9)]
@@ -233,10 +230,14 @@ def test_provenance_never_enters_indexed_text(tmp_path):
     assert "provenance" not in src.lower()
 
 
-@pytest.mark.skip(reason="pack is not implemented yet")
 def test_search_and_pack_both_show_provenance():
-    """两个出口都要有出处分级：在终端看 search 结果的人同样需要它。"""
-    for fn in (cli.cmd_search, cli.cmd_pack):
+    """两个出口都要有出处分级：在终端看 search 结果的人同样需要它。
+
+    search 的渲染在 _render_search 里（cmd_search 先整份渲染、再留痕、再交付），
+    所以对它断言；cmd_search 必须真的调它。
+    """
+    assert "_render_search(" in inspect.getsource(cli.cmd_search)
+    for fn in (cli._render_search, cli.cmd_pack):
         src = inspect.getsource(fn)
         assert "provenance_line" in src or "render_pack" in src, fn.__name__
 

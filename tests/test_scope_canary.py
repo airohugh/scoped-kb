@@ -306,9 +306,8 @@ def test_unreachable_collections_stay_unreachable_even_if_rows_are_forced_in(
         assert all(r[0] != "forced/held.md" for r in rows)
 
 
-# ---- 结构层：候选集 -> 选择 -> 渲染（pack 尚未实现）---------------------
+# ---- 结构层：候选集 -> 选择 -> 渲染 -----------------------------------
 
-@pytest.mark.skip(reason="pack is not implemented yet")
 def test_forbidden_zero_through_real_pack_pipeline(indexed_canary, canary_conn):
     """候选集 → 选择 → 渲染：三处分别由生产函数产出，不是同一份 rows 改名。
 

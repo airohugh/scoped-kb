@@ -200,7 +200,6 @@ def test_gate_rejected_cross_still_writes_trail(cross_env, monkeypatch, capsys):
     assert paths == []
 
 
-@pytest.mark.skip(reason="pack is not implemented yet")
 def test_gate_rejected_cross_pack_also_writes_trail(cross_env, monkeypatch):
     """pack 与 search 走同一条纪律，不能只修一边。"""
     logged = []

@@ -11,6 +11,7 @@ embedding 模型，向量不可比，整个共享索引失效；embedding 调用
     scoped-kb init <笔记目录>  # 生成单域配置（首次使用）
     scoped-kb index      # 增量索引（registry 换代时自动全量重建）
     scoped-kb search "…" # 检索
+    scoped-kb pack "…"   # 按任务打包一份可粘贴给外部 agent 的上下文（带凭据守卫）
     scoped-kb backfill   # 补算 embedding 为 NULL 的行
     scoped-kb status     # 看索引状态
     scoped-kb registry   # 编译校验、dry-run、指纹、世代激活
@@ -25,7 +26,7 @@ from pathlib import Path
 
 from scoped_kb import indexer, registry, settings
 from scoped_kb.db import connect
-from scoped_kb.provenance import PROVENANCE_PREFIX, provenance_line
+from scoped_kb.provenance import PROVENANCE_PREFIX, provenance_line, render_pack
 from scoped_kb.scope import (
     SCOPE_ERROR_EXIT,
     ProfileError,
@@ -34,7 +35,12 @@ from scoped_kb.scope import (
     _require_trace_ids,
     resolve_effective_profile,
 )
-from scoped_kb.search import _assert_index_readable, retrieve_candidates
+from scoped_kb.search import (
+    _assert_index_readable,
+    retrieve_candidates,
+    select_for_pack,
+)
+from scoped_kb.secret_guard import SECRET_GUARD_EXIT, SECRET_LABELS, scan_secrets
 
 # init 写出的单域配置的固定名字与文件清单
 INIT_COLLECTION = "notes"
@@ -321,6 +327,114 @@ def _render_search(reg, rows, shown, as_json):
     return "\n".join(out)
 
 
+def cmd_pack(args):
+    """按任务挑一包资料，产出可直接粘贴给外部 agent 的 markdown。
+
+    stdout 上只有这一包（横幅与提示都走 stderr），便于直接管道给剪贴板。
+    交付前过凭据守卫：检出疑似凭据就中止并以 SECRET_GUARD_EXIT 退出，
+    确认是误报才用 --force。
+
+    留痕纪律与 cmd_search 相同：eff/trace 解析出来后，无论从哪里出去
+    （拒绝、无命中、守卫中止、异常、交付失败）cross 都必须留一行。
+    pack 失败时记下已选中的位置键——内容已经读出来了，只是没交付。
+    """
+    reg, eff, trace = _resolve_for_cli(args)
+    cross = eff.effective == "cross"
+    files = set()
+    phase = "检索"
+    try:
+        print_scope_banner(eff, file=sys.stderr)
+        _assert_index_readable()      # 闸在建连接之前
+        conn = connect()
+        candidates = retrieve_candidates(conn, args.task, eff, args.limit)
+
+        if not candidates:
+            # 无命中是正常结果，不是错误：退 0。合法的 cross 尝试仍要留痕。
+            phase = "留痕"
+            if cross:
+                _log_cross(args.task, eff, trace, [], "pack", outcome="ok", note="无命中")
+            phase = "交付"
+            print("没有检索到相关内容。若确需跨域，用 "
+                  '--profile cross --include <域> --why "原因"', file=sys.stderr)
+            return
+
+        # 覆盖面 + 预算策略只在候选集过滤之后执行。
+        picked, used, files = select_for_pack(candidates, args.budget)
+        try:
+            for key in files:
+                registry.resolve_location(reg, key)
+        except registry.RegistryError as exc:
+            raise ScopeError(
+                f"索引里的位置键无法解析，拒绝交付本次结果。\n  原因: {exc}\n"
+                f"请运行 `scoped-kb index`（检测到配置变化会自动全量重建）后再查。") from exc
+        pkg = render_pack(args.task, picked, used, files, reg, args.budget)
+        hits = scan_secrets(pkg)
+
+        if hits and not args.force:
+            phase = "中止留痕"
+            if cross:
+                _log_cross(args.task, eff, trace, sorted(files), "pack", outcome="failed",
+                           note=f"凭据守卫中止，检出 {len(hits)} 处")
+            phase = "已中止"
+            print("⛔ 包里检出疑似凭据，已中止。这一包本来是要粘给外部 agent 的：\n",
+                  file=sys.stderr)
+            for h in hits[:20]:
+                print(f"   第 {h.line} 行 {_pack_source_of(pkg, h.line)} "
+                      f"[{SECRET_LABELS[h.rule]}] {h.preview}", file=sys.stderr)
+            if len(hits) > 20:
+                print(f"   …另有 {len(hits) - 20} 处", file=sys.stderr)
+            print("\n先回源文件确认。确属误报（变量名引用、示例值）再加 --force。",
+                  file=sys.stderr)
+            sys.exit(SECRET_GUARD_EXIT)
+
+        phase = "留痕"
+        if cross:
+            _log_cross(args.task, eff, trace, sorted(files), "pack", outcome="ok",
+                       note=f"--force 跳过 {len(hits)} 处凭据告警" if hits else "")
+
+        phase = "交付"
+        if args.out:
+            Path(args.out).write_text(pkg, encoding="utf-8")
+            print(f"已写入 {args.out}（{len(picked)} 片段 / {len(files)} 文件 / {used} 字）",
+                  file=sys.stderr)
+        else:
+            print(pkg)
+            sys.stdout.flush()        # 管道断开常在 flush 才暴露
+        if hits:
+            print(f"⚠️  --force 已跳过 {len(hits)} 处疑似凭据告警", file=sys.stderr)
+    except BaseException as exc:
+        # 留痕本身写不进去：交给 main 以 SCOPE_ERROR_EXIT 终止，不再补记。
+        # 守卫中止已经留过痕，原样退出。
+        if (phase in ("留痕", "中止留痕") and isinstance(exc, ScopeError)) or phase == "已中止":
+            raise
+        if cross:
+            if phase == "交付":
+                note = f"交付失败: {type(exc).__name__}"
+            elif isinstance(exc, ScopeError):
+                note = f"scope 拒绝: {(str(exc).splitlines() or [''])[0]}"
+            else:
+                note = f"异常退出: {type(exc).__name__}"
+            try:
+                _log_cross(args.task, eff, trace, sorted(files), "pack",
+                           outcome="failed", note=note)
+            except ScopeError:
+                print(exc if isinstance(exc, ScopeError)
+                      else f"原始错误: {type(exc).__name__}: {exc}", file=sys.stderr)
+                raise
+        if phase == "检索" and isinstance(exc, ScopeError):
+            print(exc, file=sys.stderr)
+            sys.exit(SCOPE_ERROR_EXIT)
+        raise
+
+
+def _pack_source_of(pkg, line_no):
+    """命中行属于包里的哪个片段：找它之前最近的「### 来源 N：`key`」标题。"""
+    for line in reversed(pkg.splitlines()[:line_no]):
+        if line.startswith("### 来源 "):
+            return "（" + line[4:].split("　")[0] + "）"
+    return "（包头）"
+
+
 def cmd_status(args, conn=None):
     conn = conn or connect()
     cur = conn.cursor()
@@ -333,17 +447,18 @@ def cmd_status(args, conn=None):
         print(f"  {cid:<12} {n}")
 
 
-def print_scope_banner(eff):
+def print_scope_banner(eff, file=None):
     """输出首部回显。**必须列出实际 collection IDs，不是计数。**
 
     只打 `collections=10` 等于没有——分辨不出这 10 个里有没有混进不该有的域，
     而那正是回显要证明的事。IDs 排序输出，便于 diff 与留痕对账。
     """
+    file = file or sys.stdout
     print(f"[profile] base={eff.base} effective={eff.effective} "
-          f"registry={eff.registry_hash[:12]}…")
+          f"registry={eff.registry_hash[:12]}…", file=file)
     if eff.effective == "cross":
-        print(f"[cross] include={','.join(eff.included)} why={eff.why}")
-    print(f"[collections] {', '.join(eff.collections)}")
+        print(f"[cross] include={','.join(eff.included)} why={eff.why}", file=file)
+    print(f"[collections] {', '.join(eff.collections)}", file=file)
 
 
 def _resolve_for_cli(args):
@@ -487,6 +602,20 @@ def build_parser():
     p.add_argument("--json", action="store_true",
                    help="机器可读输出：只打一个 JSON 数组，不打横幅与出处（供脚本/钩子解析）")
     p.set_defaults(fn=cmd_search)
+
+    p = sub.add_parser("pack", help="按任务打包一份可粘贴给外部 agent 的上下文（带凭据守卫）")
+    p.add_argument("task", help="任务描述，越具体挑得越准")
+    p.add_argument("--profile", help="任务身份。同域可省（由 cwd 推断）；"
+                                     "跨域用 cross")
+    p.add_argument("--include", action="append",
+                   help="cross 时合并的额外域，可重复或逗号分隔")
+    p.add_argument("--why", help="cross 时必填：为什么需要跨域")
+    p.add_argument("--limit", type=int, default=20, help="最多检索几个片段")
+    p.add_argument("--budget", type=int, default=8000, help="字数预算（按字符计）")
+    p.add_argument("--out", help="写入文件而非打印")
+    p.add_argument("--force", action="store_true",
+                   help="确认凭据告警是误报后才用，别默认加上")
+    p.set_defaults(fn=cmd_pack)
 
     p = sub.add_parser("backfill", help="补算 embedding 为 NULL 的行")
     p.set_defaults(fn=cmd_backfill)

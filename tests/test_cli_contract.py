@@ -1,6 +1,4 @@
-"""CLI 契约：search 走唯一候选 helper、输出回显、cross 的可追溯 ID 与落盘留痕、维护闸。
-
-pack 尚未实现：与 pack 相关的用例先保留并标 skip。
+"""CLI 契约：search / pack 走唯一候选 helper、输出回显、cross 的可追溯 ID 与落盘留痕、维护闸。
 """
 import argparse
 import inspect
@@ -10,7 +8,9 @@ import sys
 import pytest
 
 from scoped_kb import cli, registry, scope, search, settings
+from scoped_kb.provenance import PROVENANCE_PREFIX
 from scoped_kb.scope import Effective, ProfileError
+from scoped_kb.secret_guard import SECRET_GUARD_EXIT
 
 
 @pytest.fixture
@@ -239,7 +239,6 @@ def test_search_uses_the_single_candidate_helper():
     assert "embedding <=>" not in src, "cmd_search 仍在自拼向量 SQL"
 
 
-@pytest.mark.skip(reason="pack is not implemented yet")
 def test_search_and_pack_use_same_helper():
     """同一个候选 helper，不再各拼 SQL。"""
     for fn in (cli.cmd_search, cli.cmd_pack):
@@ -256,13 +255,11 @@ def test_search_does_not_read_project_id_for_filtering():
         assert "project_id" not in src
 
 
-@pytest.mark.skip(reason="pack is not implemented yet")
 def test_pack_does_not_read_project_id_for_filtering():
     src = inspect.getsource(cli.cmd_pack)
     assert "project_id = " not in src and "project_id=" not in src
 
 
-@pytest.mark.skip(reason="pack is not implemented yet")
 def test_pack_budget_strategy_runs_after_filtering():
     """pack 的覆盖面+预算策略只在候选集过滤之后执行。"""
     src = inspect.getsource(cli.cmd_pack)
@@ -470,13 +467,11 @@ def test_cross_log_unwritable_target_file_raises(reg, tmp_path, monkeypatch):
 # 只数源码里 _log_cross 出现几次证明不了——少一个出口、多一处无关调用，计数照样过。
 
 
-@pytest.mark.skip(reason="pack is not implemented yet")
 def test_pack_logs_cross_on_every_outcome():
     src = inspect.getsource(cli.cmd_pack)
     assert src.count("_log_cross") >= 2
 
 
-@pytest.mark.skip(reason="pack is not implemented yet")
 def test_pack_no_hit_returns_zero():
     """pack 无命中是正常结果：打印提示并正常返回，不是 sys.exit。"""
     src = inspect.getsource(cli.cmd_pack)
@@ -486,7 +481,6 @@ def test_pack_no_hit_returns_zero():
     assert "return" in src[i:j]
 
 
-@pytest.mark.skip(reason="pack is not implemented yet")
 def test_select_and_render_are_production_functions():
     """最终上下文要走生产的选择/渲染函数，所以它们必须是可复用的。"""
     assert callable(cli.select_for_pack)
@@ -495,7 +489,6 @@ def test_select_and_render_are_production_functions():
     assert "select_for_pack(" in src and "render_pack(" in src
 
 
-@pytest.mark.skip(reason="pack is not implemented yet")
 def test_select_for_pack_preserves_collection_id():
     """选择函数必须保留 collection_id，否则验收无法断言归属。"""
     cands = [("a.md", "x" * 50, "c1", 0.9), ("b.md", "y" * 50, "c2", 0.8)]
@@ -1050,3 +1043,102 @@ def test_cross_ok_log_failure_is_not_followed_by_a_second_failed_attempt(
     assert _cross_log_lines() == []
     captured = capsys.readouterr()
     assert "原始错误" not in captured.err and "判例正文" not in captured.out
+
+
+# ---- cmd_pack：真实跑各出口 ---------------------------------------------------
+
+# 运行时拼出来的假凭据：源码里不出现完整形态（仓库公开，会被扫描）。
+_FAKE_PW = "Q7x" + "!kq2" + "Lm9#p"
+SECRET_ROWS = [("repo_a/docs/decisions/a.md", "判例正文\nDB_PASS" + "WORD=" + _FAKE_PW,
+                "a-decisions", 0.91)] + ROWS[1:]
+
+
+def _pack_args(task="跨域打包", **kw):
+    base = {"task": task, "limit": 5, "budget": 8000, "out": None, "force": False,
+            "profile": "cross", "include": ["research"], "why": "核对研究侧判例"}
+    base.update(kw)
+    return argparse.Namespace(**base)
+
+
+def test_cmd_pack_cross_ok_delivers_package_and_logs(cross_search, fixture_base, capsys):
+    cli.cmd_pack(_pack_args())
+    (line,) = _cross_log_lines()
+    assert line["outcome"] == "ok" and line["module"] == "scoped-kb-pack"
+    assert line["metadata"]["paths"] == sorted(r[0] for r in ROWS)
+    out, err = capsys.readouterr()
+    assert out.startswith("# 任务上下文包") and "判例正文" in out and "笔记正文" in out
+    assert out.count(PROVENANCE_PREFIX) == len(ROWS)
+    assert "[profile]" not in out and "[profile]" in err, "stdout 只放这一包，横幅走 stderr"
+    assert str(fixture_base) not in out, "包里只出位置键，不出本机绝对路径"
+
+
+def test_cmd_pack_no_hit_returns_normally_and_logs(cross_search, capsys):
+    cross_search["rows"] = []
+    cli.cmd_pack(_pack_args())
+    (line,) = _cross_log_lines()
+    assert line["outcome"] == "ok" and "无命中" in line["summary"]
+    out, err = capsys.readouterr()
+    assert out == "" and "没有检索到" in err
+
+
+def test_cmd_pack_secret_guard_aborts_without_echoing(cross_search, tmp_path, capsys):
+    cross_search["rows"] = SECRET_ROWS
+    target = tmp_path / "ctx.md"
+    with pytest.raises(SystemExit) as exc:
+        cli.cmd_pack(_pack_args(out=str(target)))
+    assert exc.value.code == SECRET_GUARD_EXIT
+    assert not target.exists(), "中止时不得写出任何文件"
+    (line,) = _cross_log_lines()
+    assert line["outcome"] == "failed" and "凭据守卫中止" in line["summary"]
+    assert line["metadata"]["paths"] == sorted(r[0] for r in SECRET_ROWS), \
+        "内容已经读出来了，留痕要带位置键"
+    out, err = capsys.readouterr()
+    assert out == ""
+    assert _FAKE_PW not in err and _FAKE_PW[:5] not in err, "报告不得回显凭据"
+    assert "repo_a/docs/decisions/a.md" in err, "报告要指出是哪个片段"
+
+
+def test_cmd_pack_force_delivers_and_records_it(cross_search, capsys):
+    cross_search["rows"] = SECRET_ROWS
+    cli.cmd_pack(_pack_args(force=True))
+    (line,) = _cross_log_lines()
+    assert line["outcome"] == "ok" and "--force 跳过 1 处" in line["summary"]
+    out, err = capsys.readouterr()
+    assert _FAKE_PW in out and "--force 已跳过" in err
+
+
+def test_cmd_pack_scope_rejection_writes_failed_line(cross_search, capsys):
+    cross_search["raise"] = scope.ScopeError("registry 世代不一致，拒绝检索。\n详情")
+    with pytest.raises(SystemExit) as exc:
+        cli.cmd_pack(_pack_args())
+    assert exc.value.code == scope.SCOPE_ERROR_EXIT
+    (line,) = _cross_log_lines()
+    assert line["outcome"] == "failed" and "scope 拒绝" in line["summary"]
+
+
+def test_cmd_pack_out_writes_file_not_stdout(cross_search, tmp_path, capsys):
+    target = tmp_path / "ctx.md"
+    cli.cmd_pack(_pack_args(out=str(target)))
+    assert target.read_text(encoding="utf-8").startswith("# 任务上下文包")
+    out, err = capsys.readouterr()
+    assert out == "" and "已写入" in err
+
+
+def test_cmd_pack_delivery_failure_logs_failed_after_ok(cross_search, tmp_path):
+    with pytest.raises(OSError):
+        cli.cmd_pack(_pack_args(out=str(tmp_path / "no-such-dir" / "ctx.md")))
+    ok, failed = _cross_log_lines()
+    assert ok["outcome"] == "ok" and failed["outcome"] == "failed"
+    assert "交付失败" in failed["summary"]
+
+
+def test_cmd_pack_same_domain_writes_no_cross_log(cross_search, capsys):
+    cli.cmd_pack(_pack_args(profile=None, include=None, why=None))
+    assert not (settings.STATE_DIR / scope.CROSS_LOG_NAME).exists()
+    assert capsys.readouterr().out.startswith("# 任务上下文包")
+
+
+def test_pack_parser_exposes_expected_flags():
+    sub = cli.build_parser()._subparsers._group_actions[0].choices["pack"]
+    flags = {a.dest for a in sub._actions}
+    assert {"task", "profile", "include", "why", "limit", "budget", "out", "force"} <= flags

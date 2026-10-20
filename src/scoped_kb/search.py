@@ -36,7 +36,7 @@ LIMIT %s
 
 def retrieve_candidates(conn, query_text, eff, limit, schema="public",
                         config_paths=None):
-    """search（以及计划中的 pack）唯一的候选来源。返回 [(file_path, content, collection_id, sim)]。
+    """search 与 pack 唯一的候选来源。返回 [(file_path, content, collection_id, sim)]。
 
     三段式，顺序不可调换：
       1. 预检——在 embedding 之前挡掉空 allowlist 与世代不一致；
@@ -108,3 +108,33 @@ def retrieve_candidates(conn, query_text, eff, limit, schema="public",
             "本地配置在查询过程中发生变化，本次结果已丢弃。\n"
             "请运行 `scoped-kb index`（检测到配置变化会自动全量重建）后再查。")
     return rows
+
+
+def select_for_pack(candidates, budget):
+    """从候选行里挑出要装包的片段。**生产选择逻辑，canary 的最终上下文也走它。**
+
+    装包策略：**先保覆盖面，再补深度。**
+    第一轮每个文件只取最相关的那一块，第二轮才用剩余预算补同文件的其他块。
+
+    为什么不按相关度直接装：同一个文件的几个分块常常挤占前几名，把另一个文件里
+    真正该看的那一块挤出预算。预算有限时，覆盖更多不同来源比把少数来源读透更有用——
+    打包器的职责是「让接手的 agent 别漏掉某一类信息」，不是「把某一篇讲全」。
+    预算按字符数计；第一块即使超预算也照装，保证非空。
+
+    输入是 retrieve_candidates 的四元组，返回 (picked, used, files)，
+    picked 里保留 collection_id，便于调用方与验收断言归属。
+    """
+    picked, used, files = [], 0, set()
+    for want_new_file in (True, False):
+        for fp, content, cid, sim in candidates:
+            if (fp in files) == want_new_file:
+                continue
+            if any(c is content for _, c, _, _ in picked):
+                continue
+            if used + len(content) > budget and picked:
+                continue
+            picked.append((fp, content, cid, sim))
+            used += len(content)
+            files.add(fp)
+    picked.sort(key=lambda r: -r[3])
+    return picked, used, files
