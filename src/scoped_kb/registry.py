@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import os
 from dataclasses import asdict, dataclass
 from dataclasses import field as dataclass_field
 from pathlib import Path, PurePosixPath
@@ -878,6 +879,10 @@ def is_within(path, base):
     """
     try:
         Path(path).resolve().relative_to(Path(base).resolve())
+        # Python 3.13 起 resolve() 遇到成环的链接不再抛错，要显式探一次。
+        os.stat(path)
+    except FileNotFoundError:
+        pass
     except (ValueError, OSError, RuntimeError):
         return False
     return True
