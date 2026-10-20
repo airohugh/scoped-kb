@@ -198,6 +198,8 @@ POSITIVES = [
     # ---- 第七批：第六轮复核报出的形态（shell 参数展开的默认值）----
     ("assignment", "password: ${DB_PASSWORD:-" + _rnd(16, 172) + "}"),
     ("assignment", "export API_TOKEN=${API_TOKEN:=" + _rnd(20, 173) + "}"),
+    ("assignment", "DB_PASSWORD=${ENABLE_AUTH:+" + _rnd(16, 175) + "}"),
+    ("assignment", "token: \"https://api.example.com/v1;api_" + "key=" + _rnd(16, 176) + "\""),
     # ---- cli_flag ----
     ("cli_flag", "mysql -u app --password " + "Tg5n" + _rnd(10, 110) + " shop"),
     ("cli_flag", "tool --api-key " + _rnd(24, 111) + " --verbose"),
@@ -323,6 +325,8 @@ NEGATIVES = [
     ("shell required message", "password: ${DB_PASSWORD:?required}"),
     ("shell required long message", "token: ${API_TOKEN:?set API_TOKEN before running}"),
     ("shell nested name", "token: ${env:API_TOKEN}"),
+    ("shell default on descriptive field", "password_policy: ${PASSWORD_POLICY:-minLength12}"),
+    ("shell default on type field", "token_type: ${TOKEN_TYPE:-BearerToken}"),
     ("yaml nested key on next line", "credentials:\n  username: alice"),
     ("heading then prose on next line", "Password:\nRemember to rotate it every quarter."),
 ]

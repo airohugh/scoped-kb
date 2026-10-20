@@ -127,7 +127,7 @@ def _mask(s):
 _SECRET_GROUPS = ("qd", "qs", "qb", "val", "nqd", "nqs", "nval")
 
 # shell 参数展开 ${NAME}、${NAME:-默认值}、${NAME:?提示}。整体是占位，不往里面回扫
-# （否则「DB_PASSWORD:」会被当成新的赋值）；只有 :- / := 给出的默认值要单独判断。
+# （否则「DB_PASSWORD:」会被当成新的赋值）；:- / := / :+ 给出的值要单独判断。
 _SHELL_EXPANSION = re.compile(r"^\$\{(?P<name>[^{}]+?)(?::?(?P<op>[-=?+])(?P<default>[^{}]*))?\}$")
 
 
@@ -155,14 +155,19 @@ def scan_secrets(text):
                 if close != -1 and (eol == -1 or close < eol):
                     secret, end = text[m.start(g):close + 1], close + 1
             sh = _SHELL_EXPANSION.match(secret) if rule in ("assignment", "cli_flag") else None
+            if rule in ("assignment", "cli_flag") and _KEY_NOISE.search(groups["key"]):
+                pos = end if sh else max(m.start() + 1, m.start(g) if g else 0)
+                continue
             if sh:
+                # :- := 的默认值、:+ 的替代值都是真会被用上的值；:? 后面只是报错提示
                 default = sh.group("default") or ""
-                if sh.group("op") not in ("-", "=") or len(default) < 8 or _is_value_noise(default):
+                if sh.group("op") not in ("-", "=", "+") or len(default) < 8 \
+                        or _is_value_noise(default):
                     pos = end
                     continue
                 secret = default
-            excluded = not sh and (rule in ("assignment", "cli_flag") and (
-                            _KEY_NOISE.search(groups["key"]) or _is_value_noise(secret))) or \
+            excluded = not sh and (rule in ("assignment", "cli_flag") and
+                                   _is_value_noise(secret)) or \
                        (rule == "auth_header" and _is_value_noise(secret, _AUTH_NOISE))
             if excluded:
                 pos = max(m.start() + 1, m.start(g) if g else 0)
