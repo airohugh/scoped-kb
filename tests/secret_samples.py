@@ -209,6 +209,9 @@ POSITIVES = [
     ("assignment", "（密码：" + _rnd(16, 184) + "）。"),
     ("assignment", "[password: " + _rnd(16, 185) + "]"),
     ("assignment", "token: ${API_TOKEN:-" + _rnd(16, 186) + "}."),
+    # ---- 第十批：第 13 轮复核报出的漏检形态（引号里的右括号是值的一部分）----
+    ("assignment", "password: \"" + _rnd(7, 187) + ")\""),
+    ("assignment", "password: \"abcdefgh]\""),
     # ---- cli_flag ----
     ("cli_flag", "mysql -u app --password " + "Tg5n" + _rnd(10, 110) + " shop"),
     ("cli_flag", "tool --api-key " + _rnd(24, 111) + " --verbose"),

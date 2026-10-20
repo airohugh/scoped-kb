@@ -114,20 +114,26 @@ _TRAILING_PUNCT = ".。，、；！？"
 _TRAILING_CLOSERS = ")）」』】]"
 
 
-def _trimmed(val):
-    """值去掉末尾的标点和右括号，**保留**右花括号（「{API_TOKEN}」「${X}」本身以它结尾）。"""
-    return val.rstrip(_TRAILING_PUNCT + _TRAILING_CLOSERS)
+def _trimmed(val, quoted=False):
+    """值去掉末尾的标点和右括号，**保留**右花括号（「{API_TOKEN}」「${X}」本身以它结尾）。
+
+    引号里的值只去标点：引号已经划定了值的边界，里面的右括号就是值的一部分。
+    """
+    return val.rstrip(_TRAILING_PUNCT if quoted else _TRAILING_PUNCT + _TRAILING_CLOSERS)
 
 
-def _is_value_noise(val, noise=_VALUE_NOISE):
+_QUOTED_GROUPS = ("qd", "qs", "qb", "nqd", "nqs")
+
+
+def _is_value_noise(val, noise=_VALUE_NOISE, quoted=False):
     """值是不是排除项：去掉末尾标点与右括号的形态、再去掉右花括号的形态，任一命中即算。
 
     不拿原值比：句末的「。」会让值看起来像中文说明。去掉这些之后什么都不剩
     （「........」「(password: ........)」）就是打码或标点，不是值；不足 8 位按短值放过
     （末尾的标点和右括号不计入）。
     """
-    trimmed = _trimmed(val)
-    unbraced = trimmed.rstrip("}" + _TRAILING_PUNCT + _TRAILING_CLOSERS)
+    trimmed = _trimmed(val, quoted)
+    unbraced = trimmed if quoted else trimmed.rstrip("}" + _TRAILING_PUNCT + _TRAILING_CLOSERS)
     if len(trimmed) < 8 or not unbraced:
         return True
     return any(p.match(v) for v in (trimmed, unbraced) for p in noise)
@@ -175,7 +181,9 @@ def scan_secrets(text):
                 close, eol = text.find("}", m.start(g)), text.find("\n", m.start(g))
                 if close != -1 and (eol == -1 or close < eol):
                     secret, end = text[m.start(g):close + 1], close + 1
-            sh = _SHELL_EXPANSION.match(_trimmed(secret)) if rule in ("assignment", "cli_flag") else None
+            quoted = g in _QUOTED_GROUPS
+            sh = (_SHELL_EXPANSION.match(_trimmed(secret, quoted))
+                  if rule in ("assignment", "cli_flag") else None)
             # 放过一条匹配时从哪里接着扫：普通值从值的起点；shell 展开里 :- := :+ 给出的值
             # 是真会被用上的，从它的起点（跳过变量名）；:? 的提示与无值的展开整段跳过。
             if sh:
@@ -193,7 +201,7 @@ def scan_secrets(text):
                     continue
                 secret = default
             excluded = not sh and (rule in ("assignment", "cli_flag") and
-                                   _is_value_noise(secret)) or \
+                                   _is_value_noise(secret, quoted=quoted)) or \
                        (rule == "auth_header" and _is_value_noise(secret, _AUTH_NOISE))
             if excluded:
                 pos = resume
