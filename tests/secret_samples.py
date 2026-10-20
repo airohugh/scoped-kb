@@ -174,17 +174,30 @@ POSITIVES = [
     ("assignment", "password: `a'" + _rnd(14, 136) + "`"),
     ("assignment", "password=/" + "Kq7x" + _rnd(10, 137)),
     ("assignment", "api_key: https://api.example.com/v1?key=" + _rnd(24, 138)),
+    # ---- 第四批：第三轮复核报出的漏检形态 ----
+    ("assignment", "credentials:\n  password: " + _rnd(16, 150)),
+    ("assignment", "auth:\n  clientSecret: " + _rnd(20, 151)),
+    ("assignment", "config:\n  api_key: " + _rnd(24, 152)),
+    ("assignment", "password=\"密" + _rnd(16, 153) + "\""),
+    ("assignment", "{\"password\":\"a\\\"" + _rnd(16, 154) + "\"}"),
+    ("assignment", "password: 'a''" + _rnd(16, 155) + "'"),
+    ("assignment", "password=\"Kq7x" + _rnd(12, 156) + ":\""),
+    ("assignment", "password=Kq7x" + _rnd(12, 157) + ":"),
+    ("assignment", "password=密" + _rnd(16, 163)),
     # ---- cli_flag ----
     ("cli_flag", "mysql -u app --password " + "Tg5n" + _rnd(10, 110) + " shop"),
     ("cli_flag", "tool --api-key " + _rnd(24, 111) + " --verbose"),
     ("cli_flag", "deploy --token '" + _rnd(20, 112) + "'"),
     ("cli_flag", "backup --secret \"" + "Wq3!" + _rnd(10, 113) + "\""),
     ("cli_flag", "deploy --token \"a'" + _rnd(16, 139) + "\""),
+    ("cli_flag", "tool --password \"密" + _rnd(16, 158) + "\""),
     # ---- auth_header ----
     ("auth_header", "Authorization: Bear" + "er " + _rnd(32, 114)),
     ("auth_header", "Authorization: Bas" + "ic " + base64.b64encode(("alice:" + _rnd(12, 115)).encode()).decode()),
     ("auth_header", "curl -H 'Authorization: Tok" + "en " + _rnd(40, 116, _HEX) + "' https://api.example.com"),
     ("auth_header", "{\"Authorization\": \"Bear" + "er " + _rnd(36, 117, _URLSAFE) + "\"}"),
+    ("auth_header", "Authorization: Bear" + "er /" + _rnd(12, 159) + "/" + _rnd(16, 160)),
+    ("auth_header", "Authorization: Tok" + "en /" + _rnd(12, 161) + "/" + _rnd(16, 162)),
     # ---- 其它漏检 ----
     ("connection_string", "redis://:" + _rnd(20, 118) + "@cache.example.internal:6379/0"),
     ("api_token_prefix", "user-to-server token " + _gh + "u_" + _rnd(36, 119)),
@@ -282,6 +295,12 @@ NEGATIVES = [
     ("auth header code ref", "Authorization: Bearer process.env.API_KEY"),
     ("quoted chinese narrative", "password: \"请联系管理员获取临时账号与初始口令\""),
     ("single-quoted chinese narrative", "password: '请联系管理员获取临时口令和账号'"),
+    # ---- 第四批：第三轮复核报出的误报形态 ----
+    ("single-segment relative path", "private_key: ./id_ed25519"),
+    ("doc url with ordinary query", "api_key: https://example.com/docs?version=2"),
+    ("absolute key file path", "private_key: /etc/ssl/private/server.key"),
+    ("yaml nested empty child key", "auth:\n  username:\n    alice"),
+    ("markdown label then unindented line", "Token:\nRotated2024Q3"),
     ("yaml nested key on next line", "credentials:\n  username: alice"),
     ("heading then prose on next line", "Password:\nRemember to rotate it every quarter."),
 ]

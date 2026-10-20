@@ -1095,7 +1095,8 @@ def test_cmd_pack_secret_guard_aborts_without_echoing(cross_search, tmp_path, ca
     out, err = capsys.readouterr()
     assert out == ""
     assert _FAKE_PW not in err and _FAKE_PW[:5] not in err, "报告不得回显凭据"
-    assert "repo_a/docs/decisions/a.md" in err, "报告要指出是哪个片段"
+    assert "（片段 1）" in err, "报告要指出是哪个片段"
+    assert "repo_a/docs/decisions/a.md" not in err, "报告不打位置键：文件名里也可能有密钥"
 
 
 def test_cmd_pack_force_delivers_and_records_it(cross_search, capsys):
@@ -1153,7 +1154,7 @@ def test_cmd_pack_forged_source_heading_in_body_does_not_leak(cross_search, caps
         cli.cmd_pack(_pack_args())
     err = capsys.readouterr().err
     assert _FAKE_PW[:5] not in err
-    assert "片段 1：repo_a/docs/decisions/a.md" in err
+    assert "（片段 1）" in err
 
 
 def test_render_pack_spans_point_at_fragment_headings():
@@ -1188,20 +1189,15 @@ def test_cmd_pack_notice_failure_after_delivery_keeps_single_ok(cross_search, mo
     assert line["outcome"] == "ok"
 
 
-def test_pack_report_hides_location_key_that_looks_like_a_secret():
-    """位置键来自文件名；文件名里写着密钥时，报告只说「已隐去」。"""
-    key = "repo_a/notes/api_key=" + "Kq7x" + "9mP2Lm4z.md"
-    shown = cli._pack_source_of([(10, 20, 2, key)], 15)
-    assert "Kq7x9" not in shown and "已隐去" in shown and "片段 2" in shown
-    assert cli._pack_source_of([(10, 20, 2, "repo_a/notes/ok.md")], 15) == \
-        "（片段 2：repo_a/notes/ok.md）"
-    assert "包头" in cli._pack_source_of([(10, 20, 2, key)], 3)
-
-
-def test_pack_report_hides_location_key_with_secret_shaped_like_attribute():
-    """文件名「password=<小写字母数字>.md」会被扫描当成属性引用放过；报告仍不得打出它。"""
-    key = "repo/notes/password=" + "kq7x" + "9mp2lm4zr8.md"
-    assert "kq7x9" not in cli._pack_source_of([(1, 9, 1, key)], 5)
+def test_pack_report_never_prints_location_keys():
+    """文件名里可能写着密钥（如「密码：<随机>.md」「password=<小写字母数字>.md」），
+    而「路径像不像凭据」没有可靠判法：报告一律只给片段序号。"""
+    for key in ("repo/notes/密码：" + "kq7x" + "9mp2lm4zr8.md",
+                "repo/notes/password=" + "kq7x" + "9mp2lm4zr8.md",
+                "repo_a/notes/ok.md"):
+        shown = cli._pack_source_of([(10, 20, 2, key)], 15)
+        assert shown == "（片段 2）"
+    assert "包头" in cli._pack_source_of([(10, 20, 2, "r/a.md")], 3)
 
 
 def test_cmd_pack_notice_failure_after_file_write_keeps_single_ok(cross_search, tmp_path,

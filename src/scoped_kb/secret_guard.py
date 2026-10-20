@@ -24,21 +24,22 @@ SECRET_GUARD_EXIT = 4          # 与 argparse 用法错误的 2、作用域错�
 _KEYWORDS = (r"pass(?:word|wd|phrase)|pwd|secret|token|api[_-]?key|access[_-]?key"
              r"|private[_-]?key|auth(?!or)|credentials?")
 
-# 值：成对引号（双引号、单引号、反引号各按自己的闭合符）里的整段，或一段不含空白、
-# 引号、逗号分号的可见 ASCII。都只收 ASCII：「password=<值>。」里的中文句号不得并进值里，
-# 引号里的中文说明文字也不当成值。
-_VALUE = (r"(?:\"(?P<qd>[\x20-\x21\x23-\x7e]{8,200}?)\""
-          r"|'(?P<qs>[\x20-\x26\x28-\x7e]{8,200}?)'"
-          r"|`(?P<qb>[\x20-\x5f\x61-\x7e]{8,200}?)`"
-          r"|['\"`]?(?P<val>(?:(?![`'\",;])[\x21-\x7e]){8,}))")
-# 分隔符之后允许换一次行：YAML「password:」下一行缩进写值、JSON 冒号后换行写字符串。
-_SEP_TAIL = r"[ \t]*(?:\r?\n[ \t]*)?"
+# 值：成对引号里的整段（双引号认反斜杠转义，单引号认 YAML 的 '' 转义，反引号原样），
+# 或一段不含空白、引号、逗号分号的字符。允许非 ASCII；纯说明文字由排除项识别。
+_VALUE = (r"(?:\"(?P<qd>(?:[^\"\\\n]|\\.){8,200}?)\""
+          r"|'(?P<qs>(?:[^'\n]|''){8,200}?)'(?!')"
+          r"|`(?P<qb>[^`\n]{8,200}?)`"
+          r"|['\"`]?(?P<val>[^\s'\"`,;]{8,}))")
+# 分隔符所在行没有值时，下一行**缩进**且整行只有一个值（YAML 标量、JSON 换行写的字符串）
+# 才算它的值。下一行是「username: alice」这样的子键时不吃掉它，子键留给后面的匹配。
+_NEXT_LINE = (r"[ \t]*\r?\n[ \t]+(?:\"(?P<nqd>(?:[^\"\\\n]|\\.){8,200}?)\""
+              r"|(?P<nval>[^\s:'\"`,;]{8,}))[ \t]*,?[ \t]*(?=\r?\n|\Z)")
 
 _KEY = r"[A-Za-z0-9_.\-]*(?:" + _KEYWORDS + r")[A-Za-z0-9_.\-]*"
 
 SECRET_PATTERNS = {
     "api_token_prefix": re.compile(r"(?<![A-Za-z0-9])(?:sk-[A-Za-z0-9_\-]{20,}|gh[pousr]_[A-Za-z0-9]{30,}|github_pat_[A-Za-z0-9_]{40,}|xox[abposr]-[A-Za-z0-9\-]{10,}|AIza[0-9A-Za-z_\-]{35}|glpat-[A-Za-z0-9_\-]{20,}|hf_[A-Za-z0-9]{30,}|npm_[A-Za-z0-9]{36}|[sr]k_(?:live|test)_[A-Za-z0-9]{16,}|SG\.[A-Za-z0-9_\-]{22}\.[A-Za-z0-9_\-]{43}|\d{8,10}:[A-Za-z0-9_\-]{35})(?![A-Za-z0-9])"),
-    "assignment": re.compile(r"(?i)(?<![A-Za-z0-9])(?P<key>" + _KEY + r"|密码|口令|密钥|令牌)['\"`]?[ \t]*(?:[:=：]|\|)" + _SEP_TAIL + _VALUE),
+    "assignment": re.compile(r"(?i)(?<![A-Za-z0-9])(?P<key>" + _KEY + r"|密码|口令|密钥|令牌)['\"`]?[ \t]*(?:[:=：]|\|)(?:[ \t]*" + _VALUE + "|" + _NEXT_LINE + ")"),
     "cli_flag": re.compile(r"(?i)(?<![\w-])--?(?!-|no-)(?P<key>" + _KEY + r")[ \t]+(?!-)" + _VALUE),
     "auth_header": re.compile(r"(?i)\bauthorization['\"]?[ \t]*[:=][ \t]*['\"]?(?:bearer|basic|token)[ \t]+(?P<val>[A-Za-z0-9._~+/=\-]{8,})"),
     "connection_string": re.compile(r"\b[a-zA-Z][a-zA-Z0-9+.\-]*://[^\s/:@]*:(?P<val>[^\s/@]+)@"),
@@ -70,37 +71,43 @@ SECRET_LABELS = {
 
 _IDENT = r"(?:[a-z_][a-z0-9_]*|[a-z]+(?:[A-Z][a-z0-9]*)+|[A-Z][A-Z0-9_]*)"
 
+_P_SHELL_VAR = re.compile(r"^\$(?:[A-Z_][A-Z0-9_]*|[a-z_][a-z0-9_]*)$")   # $API_KEY / $api_key
+_P_UPPER_SNAKE = re.compile(r"^[A-Z]+(?:_[A-Z]+)+$")                      # REPLACE_ME / YOUR_API_KEY
+_P_MASKED = re.compile(r"^(?:\*+|x+|X+|\.+)$")                            # ******** / xxxxxxxx
+_P_DOTTED = re.compile(r"^(?:" + _IDENT + r"\.)+" + _IDENT + r"$")       # settings.API_KEY
+
 _VALUE_NOISE = (
     re.compile(r"^\$\{[^{}]+\}$"),                                   # ${DB_PASSWORD}
-    re.compile(r"^\$(?:[A-Z_][A-Z0-9_]*|[a-z_][a-z0-9_]*)$"),        # $API_KEY / $api_key
+    _P_SHELL_VAR,
     re.compile(r"^<[^<>]+>$"),                                       # <your-token>
     re.compile(r"^\{\{?\s*[A-Za-z_][\w.]*\s*\}\}?$"),                # {API_TOKEN} / {{ x }}
     re.compile(r"^%\([A-Za-z_]\w*\)s$"),                             # %(db_password)s
     re.compile(r"^(?:[a-z_][a-z0-9_]*\.)*[a-z_][a-z0-9_]*\(\)?$"),    # get_token() / os.getenv(
     re.compile(r"^(?:[a-z_][a-z0-9_]*\.)+[A-Za-z_]\w*\[$"),          # os.environ[
-    re.compile(r"^(?:" + _IDENT + r"\.)+" + _IDENT + r"$"),         # settings.API_KEY / process.env.SECRET
-    re.compile(r"^(?:~|\.{1,2})?(?:/[\w.\-]+){2,}/?$"),             # ~/.ssh/id_ed25519
-    re.compile(r"^https?://[^\s=]*$"),                               # 文档链接（带密码的 URL 归连接串规则）
+    _P_DOTTED,
+    re.compile(r"^(?:~|\.{1,2})/[\w.\-]+(?:/[\w.\-]+)*/?$"),        # ~/.ssh/id_ed25519 / ./id_ed25519
+    re.compile(r"^(?:/[\w.\-]+){2,}/?$"),                            # /run/secrets/db
+    re.compile(r"^https?://(?![^\s]*[?&][\w.\-]*(?i:" + _KEYWORDS + r"|key|sig(?:nature)?)[\w.\-]*=)\S*$"),  # 文档链接，查询参数里没有密钥类字段
     re.compile(r"^[a-z]+(?:[_\-][a-z]+)+$"),                         # your_api_key_here
-    re.compile(r"^[A-Z]?[a-z]{1,15}$"),                              # bearer / required / Remember
-    re.compile(r"^[A-Za-z_][\w\-]*:$"),                              # YAML 下一行是嵌套的键：「username:」
-    re.compile(r"^[A-Z]+(?:_[A-Z]+)+$"),                             # REPLACE_ME / DB_PASSWORD
-    re.compile(r"^(?:\*+|x+|X+|\.+)$"),                              # ******** / xxxxxxxx
+    re.compile(r"^[a-z]{1,15}$"),                                    # bearer / required
+    _P_UPPER_SNAKE,
+    _P_MASKED,
     re.compile(r"^[A-Za-z]+(?: [A-Za-z]+)+$"),                       # 引号里的一句普通英文
+    re.compile(r"^(?=[\s\S]*[^\x00-\x7f])(?![\s\S]*[\x21-\x7e]{8})"),  # 中文说明：有非 ASCII、没有 8 位以上的 ASCII 串
 )
+
+# 认证头后面跟的本来就是 token，只排除明确的占位、打码和代码引用（$VAR、<x> 进不了
+# 认证头的字符集，不用排除）；路径、普通词这类通用排除不套用（「Bearer /<随机>/<随机>」也是 token）。
+_AUTH_NOISE = (_P_UPPER_SNAKE, _P_MASKED, _P_DOTTED)
 
 # 字段名本身说明它装的不是凭据：password_policy、token_type、api_key_file……
 _KEY_NOISE = re.compile(r"(?i)(?:policy|type|length|len|url|uri|file|path|env|name|id|mode"
                         r"|method|header|field|format|scope|ttl|expiry|expires|endpoint)$")
 
 
-# 值要过排除项的规则：字段名提示的三类。厂商前缀等有固定形态的规则不过。
-_VALUE_CHECKED = ("assignment", "cli_flag", "auth_header")
-
-
-def _is_value_noise(val):
-    val = val.rstrip(".") or val      # 「auth: required.」——句末的点不是值的一部分
-    return any(p.match(val) for p in _VALUE_NOISE)
+def _is_value_noise(val, noise=_VALUE_NOISE):
+    val = val.rstrip(".。，、；！？") or val   # 「auth: required.」——句末标点不是值的一部分
+    return any(p.match(val) for p in noise)
 
 
 class SecretHit(NamedTuple):
@@ -115,25 +122,18 @@ def _mask(s):
     return f"{shown}…（{len(s)} 字符）"
 
 
-def looks_sensitive(text):
-    """比 scan_secrets 保守得多的判断：带关键词、`=`、`:` 或任何命中，就当它可能含凭据。
-
-    给「这段文本要不要打到报告里」用（如位置键）。宁可多藏，不能靠扫描零命中放行。
-    """
-    return bool(re.search(r"(?i)(?:" + _KEYWORDS + r")|[=:]", text) or scan_secrets(text))
-
-
 def scan_secrets(text):
     """扫描 text，返回按出现位置排序的 SecretHit 列表；没有命中返回空列表。"""
     hits = []
     for rule, pat in SECRET_PATTERNS.items():
         for m in pat.finditer(text):
             groups = m.groupdict()
-            secret = (groups.get("qd") or groups.get("qs") or groups.get("qb")
-                      or groups.get("val") or m.group(0))
-            if "key" in groups and _KEY_NOISE.search(groups["key"]):
+            secret = next((groups[g] for g in ("qd", "qs", "qb", "val", "nqd", "nval")
+                           if groups.get(g)), m.group(0))
+            if rule in ("assignment", "cli_flag") and (
+                    _KEY_NOISE.search(groups["key"]) or _is_value_noise(secret)):
                 continue
-            if rule in _VALUE_CHECKED and _is_value_noise(secret):
+            if rule == "auth_header" and _is_value_noise(secret, _AUTH_NOISE):
                 continue
             preview = "PEM 私钥头" if rule == "private_key" else _mask(secret)
             hits.append((m.start(), SecretHit(rule, text.count("\n", 0, m.start()) + 1, preview)))

@@ -43,7 +43,6 @@ from scoped_kb.search import (
 from scoped_kb.secret_guard import (
     SECRET_GUARD_EXIT,
     SECRET_LABELS,
-    looks_sensitive,
     scan_secrets,
 )
 
@@ -389,8 +388,9 @@ def cmd_pack(args):
                       f"[{SECRET_LABELS[h.rule]}] {h.preview}", file=sys.stderr)
             if len(hits) > 20:
                 print(f"   …另有 {len(hits) - 20} 处", file=sys.stderr)
-            print("\n先回源文件确认。确属误报（变量名引用、示例值）再加 --force。",
-                  file=sys.stderr)
+            print("\n要看是哪个文件：加 --force --out <本机文件> 写到本机，打开看对应的片段"
+                  "（只在本机看，确认前别粘出去）。\n先回源文件确认。确属误报（变量名引用、示例值）"
+                  "再加 --force 交付。", file=sys.stderr)
             sys.exit(SECRET_GUARD_EXIT)
 
         phase = "留痕"
@@ -439,13 +439,12 @@ def cmd_pack(args):
 def _pack_source_of(spans, line_no):
     """命中行属于包里的哪个片段，按渲染时记下的行区间查，不解析包的正文。
 
-    位置键来自索引而非正文；文件名里可能写着密钥，所以只要带关键词、`=`、`:`
-    或有任何命中就不打出来（looks_sensitive），不靠扫描零命中放行。
+    只给片段序号，不打位置键：文件名里同样可能写着密钥，而「这个路径像不像凭据」
+    没有可靠的判法。要看是哪个文件，按报告末尾的提示把包写到本机文件里自己看。
     """
-    for first, last, i, key in spans:
+    for first, last, i, _key in spans:
         if first <= line_no <= last:
-            shown = "路径可能含凭据，已隐去" if looks_sensitive(key) else key
-            return f"（片段 {i}：{shown}）"
+            return f"（片段 {i}）"
     return "（包头：任务描述或说明）"
 
 
