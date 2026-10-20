@@ -125,19 +125,33 @@ def _mask(s):
     return f"{shown}…（{len(s)} 字符）"
 
 
+_SECRET_GROUPS = ("qd", "qs", "qb", "val", "nqd", "nqs", "nval")
+
+
 def scan_secrets(text):
-    """扫描 text，返回按出现位置排序的 SecretHit 列表；没有命中返回空列表。"""
+    """扫描 text，返回按出现位置排序的 SecretHit 列表；没有命中返回空列表。
+
+    一条匹配被排除项放过时，**从它的值的起点接着扫**，不跳过整段匹配：
+    「token_url: https://…#access_token=<随机>」外层因字段名放过，里面的
+    access_token= 仍要被看到。finditer 会把被放过的那段整个跳过。
+    """
     hits = []
     for rule, pat in SECRET_PATTERNS.items():
-        for m in pat.finditer(text):
+        pos = 0
+        while True:
+            m = pat.search(text, pos)
+            if m is None:
+                break
             groups = m.groupdict()
-            secret = next((groups[g] for g in ("qd", "qs", "qb", "val", "nqd", "nqs", "nval")
-                           if groups.get(g)), m.group(0))
-            if rule in ("assignment", "cli_flag") and (
-                    _KEY_NOISE.search(groups["key"]) or _is_value_noise(secret)):
+            g = next((g for g in _SECRET_GROUPS if groups.get(g)), None)
+            secret = groups[g] if g else m.group(0)
+            excluded = (rule in ("assignment", "cli_flag") and (
+                            _KEY_NOISE.search(groups["key"]) or _is_value_noise(secret))) or \
+                       (rule == "auth_header" and _is_value_noise(secret, _AUTH_NOISE))
+            if excluded:
+                pos = max(m.start() + 1, m.start(g) if g else 0)
                 continue
-            if rule == "auth_header" and _is_value_noise(secret, _AUTH_NOISE):
-                continue
+            pos = m.end()
             preview = "PEM 私钥头" if rule == "private_key" else _mask(secret)
             hits.append((m.start(), SecretHit(rule, text.count("\n", 0, m.start()) + 1, preview)))
     hits.sort(key=lambda x: x[0])

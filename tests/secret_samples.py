@@ -188,6 +188,12 @@ POSITIVES = [
     ("assignment", "password:\n  '" + _rnd(16, 164) + "'"),
     ("assignment", "password:\n  " + _rnd(16, 165) + ":x"),
     ("assignment", "token: https://app.example.com/callback#access_" + "token=" + _rnd(16, 166)),
+    # ---- 第六批：第五轮复核报出的漏检形态（外层被放过时吞掉了里面的凭据）----
+    ("assignment", "token_url:\n  https://app.example.com/callback#access_" + "token=" + _rnd(16, 167)),
+    ("assignment", "auth_url:\n  https://api.example.com/v1?api_" + "key=" + _rnd(16, 168)),
+    ("assignment", "token_url:\n  'https://app.example.com/cb?access_" + "token=" + _rnd(16, 169) + "'"),
+    ("assignment", "token_url: https://api.example.com/v1?api_" + "key=" + _rnd(16, 170)),
+    ("assignment", "token: https://app.example.com/cb#" + "key=" + _rnd(16, 171)),
     # ---- cli_flag ----
     ("cli_flag", "mysql -u app --password " + "Tg5n" + _rnd(10, 110) + " shop"),
     ("cli_flag", "tool --api-key " + _rnd(24, 111) + " --verbose"),
