@@ -337,6 +337,8 @@ NEGATIVES = [
     ("shell default url with shell var", "auth_url: \"${AUTH_URL:-https://api.example.com/v1?api_key=$API_KEY}\""),
     # ---- 第八批：第 10 轮复核报出的误报形态 ----
     ("placeholder in parentheses", "(token: YOUR_API_KEY)"),
+    ("placeholder in parentheses with stop inside", "(see the api_key: YOUR_API_KEY.)"),
+    ("shell var in parentheses with stop inside", "(token: $API_TOKEN。)"),
     ("short value before full stop", "password: Kq7x9mP。"),
     ("yaml nested key on next line", "credentials:\n  username: alice"),
     ("heading then prose on next line", "Password:\nRemember to rotate it every quarter."),

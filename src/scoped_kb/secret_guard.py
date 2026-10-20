@@ -114,7 +114,7 @@ def _is_value_noise(val, noise=_VALUE_NOISE):
     val = val.rstrip(".。，、；！？") or val
     if len(val) < 8:
         return True
-    unbracketed = val.rstrip("})") or val
+    unbracketed = val.rstrip(".。，、；！？})") or val   # 「(token: YOUR_API_KEY.)」标点在括号里
     return any(p.match(v) for v in (val, unbracketed) for p in noise)
 
 
