@@ -43,6 +43,8 @@ A local knowledge base for markdown notes: chunked indexing, pgvector semantic s
 
 ## 快速开始
 
+> 第一次装？先看 [`docs/getting-started.md`](docs/getting-started.md)：开始之前要准备什么、最稳的一条安装路线、卡住了怎么提问。
+
 下面这条路径在一台临时 `$HOME`、隔离的 Postgres 容器下走过一遍，不依赖本机已有的任何配置文件（Ollama 部分走的是宿主机原生安装，不是下面第 1 步写的容器方式——原因和局限见"已知限制"与"容器里拉模型失败怎么办"）。
 
 ```bash
