@@ -879,11 +879,14 @@ def is_within(path, base):
     """
     try:
         Path(path).resolve().relative_to(Path(base).resolve())
-        # Python 3.13 起 resolve() 遇到成环的链接不再抛错，要显式探一次。
+    except (ValueError, OSError, RuntimeError):
+        return False
+    # Python 3.13 起 resolve() 遇到成环的链接不再抛错，要显式探一次。
+    try:
         os.stat(path)
     except FileNotFoundError:
         pass
-    except (ValueError, OSError, RuntimeError):
+    except OSError:
         return False
     return True
 
