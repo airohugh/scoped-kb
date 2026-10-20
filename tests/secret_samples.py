@@ -184,6 +184,10 @@ POSITIVES = [
     ("assignment", "password=\"Kq7x" + _rnd(12, 156) + ":\""),
     ("assignment", "password=Kq7x" + _rnd(12, 157) + ":"),
     ("assignment", "password=密" + _rnd(16, 163)),
+    # ---- 第五批：第四轮复核报出的漏检形态 ----
+    ("assignment", "password:\n  '" + _rnd(16, 164) + "'"),
+    ("assignment", "password:\n  " + _rnd(16, 165) + ":x"),
+    ("assignment", "token: https://app.example.com/callback#access_" + "token=" + _rnd(16, 166)),
     # ---- cli_flag ----
     ("cli_flag", "mysql -u app --password " + "Tg5n" + _rnd(10, 110) + " shop"),
     ("cli_flag", "tool --api-key " + _rnd(24, 111) + " --verbose"),
@@ -301,6 +305,9 @@ NEGATIVES = [
     ("absolute key file path", "private_key: /etc/ssl/private/server.key"),
     ("yaml nested empty child key", "auth:\n  username:\n    alice"),
     ("markdown label then unindented line", "Token:\nRotated2024Q3"),
+    # ---- 第五批：第四轮复核报出的误报形态 ----
+    ("auth header lowercase placeholder", "Authorization: Bearer your_api_key_here"),
+    ("auth header lowercase placeholder 2", "curl -H 'Authorization: Bear" + "er your_access_token'"),
     ("yaml nested key on next line", "credentials:\n  username: alice"),
     ("heading then prose on next line", "Password:\nRemember to rotate it every quarter."),
 ]

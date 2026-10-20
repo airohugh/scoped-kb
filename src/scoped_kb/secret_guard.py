@@ -31,9 +31,11 @@ _VALUE = (r"(?:\"(?P<qd>(?:[^\"\\\n]|\\.){8,200}?)\""
           r"|`(?P<qb>[^`\n]{8,200}?)`"
           r"|['\"`]?(?P<val>[^\s'\"`,;]{8,}))")
 # 分隔符所在行没有值时，下一行**缩进**且整行只有一个值（YAML 标量、JSON 换行写的字符串）
-# 才算它的值。下一行是「username: alice」这样的子键时不吃掉它，子键留给后面的匹配。
+# 才算它的值。下一行是「username: alice」「username:」这样的子键时不吃掉它（未加引号的值
+# 不能以冒号结尾、中间不能有空白），子键留给后面的匹配。
 _NEXT_LINE = (r"[ \t]*\r?\n[ \t]+(?:\"(?P<nqd>(?:[^\"\\\n]|\\.){8,200}?)\""
-              r"|(?P<nval>[^\s:'\"`,;]{8,}))[ \t]*,?[ \t]*(?=\r?\n|\Z)")
+              r"|'(?P<nqs>(?:[^'\n]|''){8,200}?)'(?!')"
+              r"|(?P<nval>[^\s'\"`,;]{7,}[^\s:'\"`,;]))[ \t]*,?[ \t]*(?=\r?\n|\Z)")
 
 _KEY = r"[A-Za-z0-9_.\-]*(?:" + _KEYWORDS + r")[A-Za-z0-9_.\-]*"
 
@@ -75,6 +77,7 @@ _P_SHELL_VAR = re.compile(r"^\$(?:[A-Z_][A-Z0-9_]*|[a-z_][a-z0-9_]*)$")   # $API
 _P_UPPER_SNAKE = re.compile(r"^[A-Z]+(?:_[A-Z]+)+$")                      # REPLACE_ME / YOUR_API_KEY
 _P_MASKED = re.compile(r"^(?:\*+|x+|X+|\.+)$")                            # ******** / xxxxxxxx
 _P_DOTTED = re.compile(r"^(?:" + _IDENT + r"\.)+" + _IDENT + r"$")       # settings.API_KEY
+_P_SNAKE_WORDS = re.compile(r"^[a-z]+(?:[_\-][a-z]+)+$")                  # your_api_key_here
 
 _VALUE_NOISE = (
     re.compile(r"^\$\{[^{}]+\}$"),                                   # ${DB_PASSWORD}
@@ -87,8 +90,8 @@ _VALUE_NOISE = (
     _P_DOTTED,
     re.compile(r"^(?:~|\.{1,2})/[\w.\-]+(?:/[\w.\-]+)*/?$"),        # ~/.ssh/id_ed25519 / ./id_ed25519
     re.compile(r"^(?:/[\w.\-]+){2,}/?$"),                            # /run/secrets/db
-    re.compile(r"^https?://(?![^\s]*[?&][\w.\-]*(?i:" + _KEYWORDS + r"|key|sig(?:nature)?)[\w.\-]*=)\S*$"),  # 文档链接，查询参数里没有密钥类字段
-    re.compile(r"^[a-z]+(?:[_\-][a-z]+)+$"),                         # your_api_key_here
+    re.compile(r"^https?://(?![^\s]*[?&#][\w.\-]*(?i:" + _KEYWORDS + r"|key|sig(?:nature)?)[\w.\-]*=)\S*$"),  # 文档链接，查询参数里没有密钥类字段
+    _P_SNAKE_WORDS,
     re.compile(r"^[a-z]{1,15}$"),                                    # bearer / required
     _P_UPPER_SNAKE,
     _P_MASKED,
@@ -98,7 +101,7 @@ _VALUE_NOISE = (
 
 # 认证头后面跟的本来就是 token，只排除明确的占位、打码和代码引用（$VAR、<x> 进不了
 # 认证头的字符集，不用排除）；路径、普通词这类通用排除不套用（「Bearer /<随机>/<随机>」也是 token）。
-_AUTH_NOISE = (_P_UPPER_SNAKE, _P_MASKED, _P_DOTTED)
+_AUTH_NOISE = (_P_UPPER_SNAKE, _P_SNAKE_WORDS, _P_MASKED, _P_DOTTED)
 
 # 字段名本身说明它装的不是凭据：password_policy、token_type、api_key_file……
 _KEY_NOISE = re.compile(r"(?i)(?:policy|type|length|len|url|uri|file|path|env|name|id|mode"
@@ -128,7 +131,7 @@ def scan_secrets(text):
     for rule, pat in SECRET_PATTERNS.items():
         for m in pat.finditer(text):
             groups = m.groupdict()
-            secret = next((groups[g] for g in ("qd", "qs", "qb", "val", "nqd", "nval")
+            secret = next((groups[g] for g in ("qd", "qs", "qb", "val", "nqd", "nqs", "nval")
                            if groups.get(g)), m.group(0))
             if rule in ("assignment", "cli_flag") and (
                     _KEY_NOISE.search(groups["key"]) or _is_value_noise(secret)):
