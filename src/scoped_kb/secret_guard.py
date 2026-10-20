@@ -107,15 +107,30 @@ _KEY_NOISE = re.compile(r"(?i)(?:policy|type|length|len|url|uri|file|path|env|na
                         r"|method|header|field|format|scope|ttl|expiry|expires|endpoint)$")
 
 
+# 值末尾常粘着不属于它的字符：句末标点（「auth: required.」「password: <值>。」），
+# 句子外面的右括号（「(token: YOUR_API_KEY)」「（token：YOUR_API_KEY）」「${API_TOKEN}.」），
+# 以及回扫 shell 默认值时带上的右花括号（「…?token=YOUR_API_KEY}」）。
+_TRAILING_PUNCT = ".。，、；！？"
+_TRAILING_CLOSERS = ")）」』】]"
+
+
+def _trimmed(val):
+    """值去掉末尾的标点和右括号，**保留**右花括号（「{API_TOKEN}」「${X}」本身以它结尾）。"""
+    return val.rstrip(_TRAILING_PUNCT + _TRAILING_CLOSERS)
+
+
 def _is_value_noise(val, noise=_VALUE_NOISE):
-    # 句末标点（「auth: required.」「password: <值>。」）先剥掉，它不是值的一部分；剥完不足
-    # 8 位就按短值放过。回扫时带上的右括号（「${URL:-…?token=YOUR_API_KEY}」「(token: YOUR_API_KEY)」）
-    # 再剥一层判断；只剥了标点的值也判断，因为「{API_TOKEN}」这种占位本身就以花括号结尾。
-    val = val.rstrip(".。，、；！？") or val
-    if len(val) < 8:
+    """值是不是排除项：去掉末尾标点与右括号的形态、再去掉右花括号的形态，任一命中即算。
+
+    不拿原值比：句末的「。」会让值看起来像中文说明。去掉这些之后什么都不剩
+    （「........」「(password: ........)」）就是打码或标点，不是值；不足 8 位按短值放过
+    （末尾的标点和右括号不计入）。
+    """
+    trimmed = _trimmed(val)
+    unbraced = trimmed.rstrip("}" + _TRAILING_PUNCT + _TRAILING_CLOSERS)
+    if len(trimmed) < 8 or not unbraced:
         return True
-    unbracketed = val.rstrip(".。，、；！？})") or val   # 「(token: YOUR_API_KEY.)」标点在括号里
-    return any(p.match(v) for v in (val, unbracketed) for p in noise)
+    return any(p.match(v) for v in (trimmed, unbraced) for p in noise)
 
 
 class SecretHit(NamedTuple):
@@ -160,7 +175,7 @@ def scan_secrets(text):
                 close, eol = text.find("}", m.start(g)), text.find("\n", m.start(g))
                 if close != -1 and (eol == -1 or close < eol):
                     secret, end = text[m.start(g):close + 1], close + 1
-            sh = _SHELL_EXPANSION.match(secret) if rule in ("assignment", "cli_flag") else None
+            sh = _SHELL_EXPANSION.match(_trimmed(secret)) if rule in ("assignment", "cli_flag") else None
             # 放过一条匹配时从哪里接着扫：普通值从值的起点；shell 展开里 :- := :+ 给出的值
             # 是真会被用上的，从它的起点（跳过变量名）；:? 的提示与无值的展开整段跳过。
             if sh:
