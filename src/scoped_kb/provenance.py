@@ -140,22 +140,35 @@ def provenance_line(file_path, collection_id, reg=None, compact=False):
     return PROVENANCE_PREFIX + line
 
 
-def render_pack(task, picked, used, files, reg=None, budget=None):
+def render_pack(task, picked, used, files, reg=None, budget=None, with_spans=False):
     """把选出的片段渲染成可粘贴的 markdown。**生产渲染逻辑。**
 
     片段标题用位置键（`<owner>/<相对路径>`），不用绝对路径：这一包是要粘给
-    外部 agent 的，绝对路径会把本机目录结构一起送出去。
+    外部 agent 的，绝对路径会把本机目录结构一起送出去。片段正文原样保留，
+    正文里自己写着的路径不在此列。
     reg 可选：拿不到 registry 就降级成「只报 frontmatter 里有的」，不崩、不猜归属。
     budget 给了才做降级判断；不给就按完整 source_url 渲染。
+
+    with_spans 时返回 (包, spans)，spans 是 [(首行, 末行, 片段序号, 位置键)]，行号从 1 起。
+    凭据守卫靠它把命中行对回片段——不能回头解析包里的「### 来源」标题，
+    正文里同样可以写出这样一行。
     """
     lines = [provenance_line(fp, cid, reg) for fp, _c, cid, _s in picked]
     if budget and sum(len(x) for x in lines) > budget * PROVENANCE_BUDGET_SHARE:
         lines = [provenance_line(fp, cid, reg, compact=True) for fp, _c, cid, _s in picked]
-    body = "\n\n".join(
-        f"### 来源 {i}：`{fp}`　（相关度 {sim:.3f}）\n{line}\n\n{content}"
-        for i, ((fp, content, _cid, sim), line) in enumerate(zip(picked, lines), 1))
-    return (f"# 任务上下文包\n\n**任务：** {task}\n\n"
+    frags = [f"### 来源 {i}：`{fp}`　（相关度 {sim:.3f}）\n{line}\n\n{content}"
+             for i, ((fp, content, _cid, sim), line) in enumerate(zip(picked, lines), 1)]
+    head = (f"# 任务上下文包\n\n**任务：** {task}\n\n"
             f"**这一包是按任务从知识库检索出来的 {len(picked)} 个片段"
             f"（{len(files)} 个文件、{used} 字），不是全部资料。** "
             f"引用的结论请回源文件核实。\n\n"
-            f"{PROVENANCE_LEGEND}\n\n---\n\n{body}\n")
+            f"{PROVENANCE_LEGEND}\n\n---\n\n")
+    pkg = head + "\n\n".join(frags) + "\n"
+    if not with_spans:
+        return pkg
+    spans, first = [], head.count("\n") + 1
+    for i, ((fp, _c, _cid, _s), frag) in enumerate(zip(picked, frags), 1):
+        last = first + frag.count("\n")
+        spans.append((first, last, i, fp))
+        first = last + 2              # 片段之间隔一个空行
+    return pkg, spans

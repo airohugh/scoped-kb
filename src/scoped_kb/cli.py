@@ -367,7 +367,8 @@ def cmd_pack(args):
             raise ScopeError(
                 f"索引里的位置键无法解析，拒绝交付本次结果。\n  原因: {exc}\n"
                 f"请运行 `scoped-kb index`（检测到配置变化会自动全量重建）后再查。") from exc
-        pkg = render_pack(args.task, picked, used, files, reg, args.budget)
+        pkg, spans = render_pack(args.task, picked, used, files, reg, args.budget,
+                                 with_spans=True)
         hits = scan_secrets(pkg)
 
         if hits and not args.force:
@@ -379,7 +380,7 @@ def cmd_pack(args):
             print("⛔ 包里检出疑似凭据，已中止。这一包本来是要粘给外部 agent 的：\n",
                   file=sys.stderr)
             for h in hits[:20]:
-                print(f"   第 {h.line} 行 {_pack_source_of(pkg, h.line)} "
+                print(f"   第 {h.line} 行 {_pack_source_of(spans, h.line)} "
                       f"[{SECRET_LABELS[h.rule]}] {h.preview}", file=sys.stderr)
             if len(hits) > 20:
                 print(f"   …另有 {len(hits) - 20} 处", file=sys.stderr)
@@ -400,12 +401,14 @@ def cmd_pack(args):
         else:
             print(pkg)
             sys.stdout.flush()        # 管道断开常在 flush 才暴露
+        phase = "已交付"              # 之后只剩 stderr 提示；它失败不算交付失败
         if hits:
             print(f"⚠️  --force 已跳过 {len(hits)} 处疑似凭据告警", file=sys.stderr)
     except BaseException as exc:
         # 留痕本身写不进去：交给 main 以 SCOPE_ERROR_EXIT 终止，不再补记。
-        # 守卫中止已经留过痕，原样退出。
-        if (phase in ("留痕", "中止留痕") and isinstance(exc, ScopeError)) or phase == "已中止":
+        # 守卫中止已经留过痕、已交付的 ok 行如实，原样退出。
+        if (phase in ("留痕", "中止留痕") and isinstance(exc, ScopeError)) \
+                or phase in ("已中止", "已交付"):
             raise
         if cross:
             if phase == "交付":
@@ -427,12 +430,16 @@ def cmd_pack(args):
         raise
 
 
-def _pack_source_of(pkg, line_no):
-    """命中行属于包里的哪个片段：找它之前最近的「### 来源 N：`key`」标题。"""
-    for line in reversed(pkg.splitlines()[:line_no]):
-        if line.startswith("### 来源 "):
-            return "（" + line[4:].split("　")[0] + "）"
-    return "（包头）"
+def _pack_source_of(spans, line_no):
+    """命中行属于包里的哪个片段，按渲染时记下的行区间查，不解析包的正文。
+
+    位置键来自索引而非正文；它本身若带疑似凭据（文件名里写了密钥），也不打出来。
+    """
+    for first, last, i, key in spans:
+        if first <= line_no <= last:
+            shown = "路径含疑似凭据，已隐去" if scan_secrets(key) else key
+            return f"（片段 {i}：{shown}）"
+    return "（包头：任务描述或说明）"
 
 
 def cmd_status(args, conn=None):

@@ -1142,3 +1142,57 @@ def test_pack_parser_exposes_expected_flags():
     sub = cli.build_parser()._subparsers._group_actions[0].choices["pack"]
     flags = {a.dest for a in sub._actions}
     assert {"task", "profile", "include", "why", "limit", "budget", "out", "force"} <= flags
+
+
+def test_cmd_pack_forged_source_heading_in_body_does_not_leak(cross_search, capsys):
+    """正文里写一行假的「### 来源」标题，报告也不能把那一行（连同里面的凭据）打出来。"""
+    forged = "### 来源 9：`password=" + _FAKE_PW + "`"
+    cross_search["rows"] = [("repo_a/docs/decisions/a.md", "判例正文\n" + forged,
+                             "a-decisions", 0.91)]
+    with pytest.raises(SystemExit):
+        cli.cmd_pack(_pack_args())
+    err = capsys.readouterr().err
+    assert _FAKE_PW[:5] not in err
+    assert "片段 1：repo_a/docs/decisions/a.md" in err
+
+
+def test_render_pack_spans_point_at_fragment_headings():
+    rows = [("r/a.md", "一\n二\n三", "c1", 0.9), ("r/b.md", "四", "c1", 0.8),
+            ("r/c.md", "五\n六", "c1", 0.7)]
+    pkg, spans = cli.render_pack("任务\n第二行", rows, 7, {"r/a.md", "r/b.md", "r/c.md"},
+                                 with_spans=True)
+    lines = pkg.splitlines()
+    for (first, last, i, key), (fp, content, _c, _s) in zip(spans, rows):
+        assert lines[first - 1].startswith(f"### 来源 {i}：`{key}`") and key == fp
+        assert lines[last - 1] == content.splitlines()[-1]
+    assert pkg == cli.render_pack("任务\n第二行", rows, 7, {"r/a.md", "r/b.md", "r/c.md"})
+
+
+def test_cmd_pack_notice_failure_after_delivery_keeps_single_ok(cross_search, monkeypatch, capsys):
+    """包已经交付后，stderr 上的提示写失败不算交付失败，不补 failed 行。"""
+    cross_search["rows"] = SECRET_ROWS
+
+    class _BoomErr:
+        def write(self, text):
+            if "--force 已跳过" in text:
+                raise BrokenPipeError
+            return len(text)
+
+        def flush(self):
+            pass
+
+    monkeypatch.setattr(sys, "stderr", _BoomErr())
+    with pytest.raises(BrokenPipeError):
+        cli.cmd_pack(_pack_args(force=True))
+    (line,) = _cross_log_lines()
+    assert line["outcome"] == "ok"
+
+
+def test_pack_report_hides_location_key_that_looks_like_a_secret():
+    """位置键来自文件名；文件名里写着密钥时，报告只说「已隐去」。"""
+    key = "repo_a/notes/api_key=" + "Kq7x" + "9mP2Lm4z.md"
+    shown = cli._pack_source_of([(10, 20, 2, key)], 15)
+    assert "Kq7x9" not in shown and "已隐去" in shown and "片段 2" in shown
+    assert cli._pack_source_of([(10, 20, 2, "repo_a/notes/ok.md")], 15) == \
+        "（片段 2：repo_a/notes/ok.md）"
+    assert "包头" in cli._pack_source_of([(10, 20, 2, key)], 3)

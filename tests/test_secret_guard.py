@@ -51,20 +51,31 @@ def test_every_rule_is_load_bearing(rule, monkeypatch):
 
 
 def test_preview_never_echoes_the_secret():
-    """报告进终端与日志，不得回显凭据原文。"""
+    """报告进终端与日志，不得回显凭据原文，也不得回显字段名等来自被扫文本的片段。
+
+    断言 preview 的**形状**：要么是固定标签，要么是「至多 4 个可见字符 + … + 长度」，
+    且可见字符不超过长度的四分之一。只查「某段不在 preview 里」挡不住「藏前几位、露后面」。
+    """
     for _category, text in POSITIVES:
         for hit in scan_secrets(text):
-            # 样本里带数字、长度 ≥ 8 的片段都可能是凭据主体（字段名、协议名、PEM 头
-            # 不带数字），掩码里不得出现其中任何一个的前 5 位
-            for tok in re.findall(r"[^\s'\"`,;=:@/]{8,}", text):
-                if re.search(r"\d", tok):
-                    assert tok[:5] not in hit.preview, (hit.rule, hit.preview)
+            if hit.preview == "PEM 私钥头":
+                continue
+            m = re.fullmatch(r"(?P<shown>[^…]{0,4})…（(?P<n>\d+) 字符）", hit.preview)
+            assert m, (hit.rule, hit.preview)
+            assert len(m.group("shown")) <= int(m.group("n")) // 4, (hit.rule, hit.preview)
 
 
-def test_hit_line_numbers_point_at_the_secret():
-    text = "第一行\n第二行\n" + POSITIVES[0][1]
-    first = scan_secrets(text)[0]
-    assert first.line >= 3
+def test_secret_inside_field_name_is_not_echoed():
+    """字段名也来自被扫文本：字段名里夹着一段密钥时，preview 不得带出它。"""
+    body = "Zx9" + "Qw8" + "Er7" + "Ty6" + "Ui5"
+    for hit in scan_secrets("api_key_" + body + "=" + "Kq7x" + "9mP2Lm4z"):
+        assert body[:5] not in hit.preview and "api_key" not in hit.preview
+
+
+def test_hit_line_numbers_are_exact():
+    text = ("第一行\n第二行\n" + "password=" + "Kq7x" + "9mP2Lm4z\n"
+            + "第四行\n" + "token: " + "Rt5w" + "Yh3Nb8Vc")
+    assert [h.line for h in scan_secrets(text)] == [3, 5]
 
 
 def test_exit_code_is_distinct():

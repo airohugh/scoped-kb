@@ -150,6 +150,36 @@ POSITIVES = [
     ("assignment", "测试环境的数据库密码：" + _rnd(6, 96) + "!" + _rnd(5, 97)),
     ("assignment", "令牌=" + _rnd(24, 98)),
     ("assignment", "export GPG_PASS" + "PHRASE=" + _rnd(10, 99) + "%" + _rnd(3, 100)),
+    # ---- 第二批：外部复核报出的漏检形态（复核方按形态描述，这里照描述造）----
+    # 排除项只看首字符时会被放过的值：守着「排除项别放宽」
+    ("assignment", "password=$" + "Kq7x" + _rnd(12, 101)),
+    ("assignment", "password=%" + "Rt5w" + _rnd(12, 102)),
+    ("assignment", "password=[" + "Mz3p" + _rnd(12, 103)),
+    ("assignment", "password=" + "Kq7x(" + "9mP2" + _rnd(8, 104)),
+    ("assignment", "password=" + "Kq7x9." + "mP2Lm" + _rnd(4, 105)),
+    ("assignment", "数据库 password=" + "Hv6t" + _rnd(12, 106) + "。下次换掉"),
+    # markdown 与引号里的值
+    ("assignment", "password: `" + "Jw2c" + _rnd(12, 107) + "`"),
+    ("assignment", "password=\"blue " + "Pn4k" + _rnd(8, 108) + "\""),
+    ("assignment", "| password | " + "Ld8s" + _rnd(12, 109) + " |"),
+    ("assignment", "签名密钥=" + _rnd(20, 125)),
+    ("assignment", "password=" + _rnd(12, 126, "ABCDEFGHIJKLMNOPQRSTUVWXYZ")),
+    # ---- cli_flag ----
+    ("cli_flag", "mysql -u app --password " + "Tg5n" + _rnd(10, 110) + " shop"),
+    ("cli_flag", "tool --api-key " + _rnd(24, 111) + " --verbose"),
+    ("cli_flag", "deploy --token '" + _rnd(20, 112) + "'"),
+    ("cli_flag", "backup --secret \"" + "Wq3!" + _rnd(10, 113) + "\""),
+    # ---- auth_header ----
+    ("auth_header", "Authorization: Bear" + "er " + _rnd(32, 114)),
+    ("auth_header", "Authorization: Bas" + "ic " + base64.b64encode(("alice:" + _rnd(12, 115)).encode()).decode()),
+    ("auth_header", "curl -H 'Authorization: Tok" + "en " + _rnd(40, 116, _HEX) + "' https://api.example.com"),
+    ("auth_header", "{\"Authorization\": \"Bear" + "er " + _rnd(36, 117, _URLSAFE) + "\"}"),
+    # ---- 其它漏检 ----
+    ("connection_string", "redis://:" + _rnd(20, 118) + "@cache.example.internal:6379/0"),
+    ("api_token_prefix", "user-to-server token " + _gh + "u_" + _rnd(36, 119)),
+    ("api_token_prefix", "refresh token " + _gh + "r_" + _rnd(36, 120)),
+    ("api_token_prefix", "mail key " + "S" + "G." + _rnd(22, 121, _URLSAFE) + "." + _rnd(43, 122, _URLSAFE)),
+    ("api_token_prefix", "bot " + _rnd(10, 123, _DIGITS) + ":" + "AA" + _rnd(33, 124, _URLSAFE)),
 ]
 
 NEGATIVES = [
@@ -211,4 +241,19 @@ NEGATIVES = [
     ("masked value dots", "token = ............"),
     ("chinese narrative value", "密码：请联系管理员获取临时账号与初始口令"),
     ("chinese narrative token", "令牌：在设置页面里生成，有效期三十天"),
+    # ---- 第二批：每个排除项各有一条只靠它放行的负例 ----
+    ("placeholder printf style", "password = %(db_password)s"),
+    ("placeholder single braces", "api_token: {API_TOKEN}"),
+    ("placeholder lowercase shell var", "token = $api_key_value"),
+    ("masked uppercase", "password: XXXXXXXXXXXX"),
+    ("masked long lowercase", "secret = xxxxxxxxxxxxxxxxxxxx"),
+    ("path value", "private_key: ~/.ssh/id_ed25519"),
+    ("docs url value", "api_key: https://example.com/docs/api-keys"),
+    ("policy field", "password_policy: minLength12"),
+    ("trailing period", "auth: required."),
+    ("quoted plain sentence", "password: \"see the vault\""),
+    ("auth header placeholder", "Authorization: Bearer <token>"),
+    ("auth header shell var", "Authorization: Bearer $TOKEN"),
+    ("cli flag file", "mysql --password-file /run/secrets/db"),
+    ("cli flag without value", "./run --verbose --token"),
 ]
