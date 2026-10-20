@@ -108,10 +108,14 @@ _KEY_NOISE = re.compile(r"(?i)(?:policy|type|length|len|url|uri|file|path|env|na
 
 
 def _is_value_noise(val, noise=_VALUE_NOISE):
-    # 「auth: required.」的句末标点、「${URL:-…?token=YOUR_API_KEY}」回扫时带上的右花括号
-    # 都不是值的一部分。原值也照样判断：「{API_TOKEN}」这种占位本身就以花括号结尾。
-    stripped = val.rstrip(".。，、；！？})") or val
-    return any(p.match(v) for v in (val, stripped) for p in noise)
+    # 句末标点（「auth: required.」「password: <值>。」）先剥掉，它不是值的一部分；剥完不足
+    # 8 位就按短值放过。回扫时带上的右括号（「${URL:-…?token=YOUR_API_KEY}」「(token: YOUR_API_KEY)」）
+    # 再剥一层判断；只剥了标点的值也判断，因为「{API_TOKEN}」这种占位本身就以花括号结尾。
+    val = val.rstrip(".。，、；！？") or val
+    if len(val) < 8:
+        return True
+    unbracketed = val.rstrip("})") or val
+    return any(p.match(v) for v in (val, unbracketed) for p in noise)
 
 
 class SecretHit(NamedTuple):

@@ -202,6 +202,10 @@ POSITIVES = [
     ("assignment", "token_url: ${TOKEN_URL:-https://api.example.com/v1?access_" + "token=" + _rnd(16, 177) + "}"),
     ("assignment", "token_url: \"${TOKEN_URL:-https://api.example.com/v1?access_" + "token=" + _rnd(16, 178) + "}\""),
     ("assignment", "token: \"https://api.example.com/v1;api_" + "key=" + _rnd(16, 176) + "\""),
+    # ---- 第八批：第 10 轮复核报出的形态（句末全角标点）----
+    ("assignment", "secret: \"" + _rnd(6, 179) + " " + _rnd(6, 180) + "。\""),
+    ("assignment", "token: \"" + _rnd(6, 181) + " " + _rnd(6, 182) + "，\""),
+    ("assignment", "密码：" + _rnd(10, 183) + "。"),
     # ---- cli_flag ----
     ("cli_flag", "mysql -u app --password " + "Tg5n" + _rnd(10, 110) + " shop"),
     ("cli_flag", "tool --api-key " + _rnd(24, 111) + " --verbose"),
@@ -331,6 +335,9 @@ NEGATIVES = [
     ("shell default on type field", "token_type: ${TOKEN_TYPE:-BearerToken}"),
     ("shell default url with placeholder", "token_url: ${TOKEN_URL:-https://api.example.com/v1?access_token=YOUR_API_KEY}"),
     ("shell default url with shell var", "auth_url: \"${AUTH_URL:-https://api.example.com/v1?api_key=$API_KEY}\""),
+    # ---- 第八批：第 10 轮复核报出的误报形态 ----
+    ("placeholder in parentheses", "(token: YOUR_API_KEY)"),
+    ("short value before full stop", "password: Kq7x9mP。"),
     ("yaml nested key on next line", "credentials:\n  username: alice"),
     ("heading then prose on next line", "Password:\nRemember to rotate it every quarter."),
 ]
