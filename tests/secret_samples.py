@@ -199,6 +199,8 @@ POSITIVES = [
     ("assignment", "password: ${DB_PASSWORD:-" + _rnd(16, 172) + "}"),
     ("assignment", "export API_TOKEN=${API_TOKEN:=" + _rnd(20, 173) + "}"),
     ("assignment", "DB_PASSWORD=${ENABLE_AUTH:+" + _rnd(16, 175) + "}"),
+    ("assignment", "token_url: ${TOKEN_URL:-https://api.example.com/v1?access_" + "token=" + _rnd(16, 177) + "}"),
+    ("assignment", "token_url: \"${TOKEN_URL:-https://api.example.com/v1?access_" + "token=" + _rnd(16, 178) + "}\""),
     ("assignment", "token: \"https://api.example.com/v1;api_" + "key=" + _rnd(16, 176) + "\""),
     # ---- cli_flag ----
     ("cli_flag", "mysql -u app --password " + "Tg5n" + _rnd(10, 110) + " shop"),

@@ -155,22 +155,27 @@ def scan_secrets(text):
                 if close != -1 and (eol == -1 or close < eol):
                     secret, end = text[m.start(g):close + 1], close + 1
             sh = _SHELL_EXPANSION.match(secret) if rule in ("assignment", "cli_flag") else None
+            # 放过一条匹配时从哪里接着扫：普通值从值的起点；shell 展开里 :- := :+ 给出的值
+            # 是真会被用上的，从它的起点（跳过变量名）；:? 的提示与无值的展开整段跳过。
+            if sh:
+                gives_value = sh.group("op") in ("-", "=", "+") and sh.group("default")
+                resume = m.start(g) + sh.start("default") if gives_value else end
+            else:
+                resume = max(m.start() + 1, m.start(g) if g else 0)
             if rule in ("assignment", "cli_flag") and _KEY_NOISE.search(groups["key"]):
-                pos = end if sh else max(m.start() + 1, m.start(g) if g else 0)
+                pos = resume
                 continue
             if sh:
-                # :- := 的默认值、:+ 的替代值都是真会被用上的值；:? 后面只是报错提示
                 default = sh.group("default") or ""
-                if sh.group("op") not in ("-", "=", "+") or len(default) < 8 \
-                        or _is_value_noise(default):
-                    pos = end
+                if not gives_value or len(default) < 8 or _is_value_noise(default):
+                    pos = resume
                     continue
                 secret = default
             excluded = not sh and (rule in ("assignment", "cli_flag") and
                                    _is_value_noise(secret)) or \
                        (rule == "auth_header" and _is_value_noise(secret, _AUTH_NOISE))
             if excluded:
-                pos = max(m.start() + 1, m.start(g) if g else 0)
+                pos = resume
                 continue
             pos = end
             preview = "PEM 私钥头" if rule == "private_key" else _mask(secret)
