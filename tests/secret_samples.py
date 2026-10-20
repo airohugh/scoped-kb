@@ -329,6 +329,8 @@ NEGATIVES = [
     ("shell nested name", "token: ${env:API_TOKEN}"),
     ("shell default on descriptive field", "password_policy: ${PASSWORD_POLICY:-minLength12}"),
     ("shell default on type field", "token_type: ${TOKEN_TYPE:-BearerToken}"),
+    ("shell default url with placeholder", "token_url: ${TOKEN_URL:-https://api.example.com/v1?access_token=YOUR_API_KEY}"),
+    ("shell default url with shell var", "auth_url: \"${AUTH_URL:-https://api.example.com/v1?api_key=$API_KEY}\""),
     ("yaml nested key on next line", "credentials:\n  username: alice"),
     ("heading then prose on next line", "Password:\nRemember to rotate it every quarter."),
 ]
