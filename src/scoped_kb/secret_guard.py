@@ -111,15 +111,28 @@ _KEY_NOISE = re.compile(r"(?i)(?:policy|type|length|len|url|uri|file|path|env|na
 # 句子外面的右括号（「(token: YOUR_API_KEY)」「（token：YOUR_API_KEY）」「${API_TOKEN}.」），
 # 以及回扫 shell 默认值时带上的右花括号（「…?token=YOUR_API_KEY}」）。
 _TRAILING_PUNCT = ".。，、；！？"
-_TRAILING_CLOSERS = ")）」』】]"
+_TRAILING_CLOSERS = ")）」』】]”’》］〕〉｝"
+
+# 包住整个值的括号与中文引号（「token: (YOUR_API_KEY)」「token：“YOUR_API_KEY”」）。
+# 开符只在末尾剥掉的部分里有对应闭符时才剥：「password=[<随机>」的「[」仍是值的一部分。
+_OPENERS = {"(": ")", "（": "）", "[": "]", "［": "］", "「": "」", "『": "』", "【": "】",
+            "“": "”", "‘": "’", "《": "》", "〔": "〕", "〈": "〉", "｛": "｝"}
 
 
 def _trimmed(val, quoted=False):
-    """值去掉末尾的标点和右括号，**保留**右花括号（「{API_TOKEN}」「${X}」本身以它结尾）。
+    """值去掉末尾的标点和右括号，**保留**右花括号（「{API_TOKEN}」「${X}」本身以它结尾）；
+    开头的开括号、开引号在末尾有对应闭符时一并剥掉，可以套几层。
 
-    引号里的值只去标点：引号已经划定了值的边界，里面的右括号就是值的一部分。
+    引号里的值只去标点：引号已经划定了值的边界，里面的括号就是值的一部分。
     """
-    return val.rstrip(_TRAILING_PUNCT if quoted else _TRAILING_PUNCT + _TRAILING_CLOSERS)
+    if quoted:
+        return val.rstrip(_TRAILING_PUNCT)
+    core = val.rstrip(_TRAILING_PUNCT + _TRAILING_CLOSERS)
+    tail = val[len(core):]
+    while core[:1] in _OPENERS and _OPENERS[core[0]] in tail:
+        tail = tail.replace(_OPENERS[core[0]], "", 1)
+        core = core[1:]
+    return core
 
 
 _QUOTED_GROUPS = ("qd", "qs", "qb", "nqd", "nqs")
@@ -131,7 +144,7 @@ def _is_value_noise(val, noise=_VALUE_NOISE, quoted=False):
 
     不拿原值比：句末的「。」会让值看起来像中文说明。去掉这些之后什么都不剩
     （「........」「(password: ........)」）就是打码或标点，不是值；不足 8 位按短值放过
-    （末尾的标点和右括号不计入）。
+    （末尾的标点和右括号、成对包住值的括号不计入）。
     """
     trimmed = _trimmed(val, quoted)
     unbraced = trimmed if quoted else trimmed.rstrip("}" + _TRAILING_PUNCT + _TRAILING_CLOSERS)
@@ -189,7 +202,8 @@ def scan_secrets(text):
             # 是真会被用上的，从它的起点（跳过变量名）；:? 的提示与无值的展开整段跳过。
             if sh:
                 gives_value = sh.group("op") in ("-", "=", "+") and sh.group("default")
-                resume = m.start(g) + sh.start("default") if gives_value else end
+                lead = secret.index(sh.string)       # 剥掉的开括号、开引号
+                resume = m.start(g) + lead + sh.start("default") if gives_value else end
             else:
                 resume = max(m.start() + 1, m.start(g) if g else 0)
             if rule in ("assignment", "cli_flag") and _KEY_NOISE.search(groups["key"]):
@@ -197,7 +211,8 @@ def scan_secrets(text):
                 continue
             if sh:
                 default = sh.group("default") or ""
-                if not gives_value or len(default) < 8 or _is_value_noise(default):
+                # 默认值的边界是右花括号划定的，和引号一样：里面的括号算值的一部分
+                if not gives_value or len(default) < 8 or _is_value_noise(default, quoted=True):
                     pos = resume
                     continue
                 secret = default

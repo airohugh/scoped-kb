@@ -212,6 +212,17 @@ POSITIVES = [
     # ---- 第十批：第 13 轮复核报出的漏检形态（引号里的右括号是值的一部分）----
     ("assignment", "password: \"" + _rnd(7, 187) + ")\""),
     ("assignment", "password: \"abcdefgh]\""),
+    # ---- 第十一批：成对括号、中文引号与 shell 默认值的边界（守着「别放宽」）----
+    ("assignment", "token：“" + _rnd(16, 188) + "”"),
+    ("assignment", "token: (" + _rnd(16, 189) + ")"),
+    ("assignment", "《token: " + _rnd(16, 190) + "》"),
+    ("assignment", "password=(" + _rnd(7, 191)),
+    ("assignment", "token: (" + _rnd(7, 192) + "]"),
+    ("assignment", "password: \"(" + _rnd(6, 193) + ")\""),
+    ("assignment", "token：“${API_TOKEN:-" + _rnd(16, 194) + "}”"),
+    ("assignment", "password: \"${DB_PASSWORD:-" + _rnd(7, 195) + ")}\""),
+    ("assignment", "password: ${DB_PASSWORD:-" + _rnd(7, 196) + ")}"),
+    ("assignment", "password=((" + _rnd(7, 197) + ")"),
     # ---- cli_flag ----
     ("cli_flag", "mysql -u app --password " + "Tg5n" + _rnd(10, 110) + " shop"),
     ("cli_flag", "tool --api-key " + _rnd(24, 111) + " --verbose"),
@@ -359,4 +370,21 @@ NEGATIVES = [
     ("short value before full stop", "password: Kq7x9mP。"),
     ("yaml nested key on next line", "credentials:\n  username: alice"),
     ("heading then prose on next line", "Password:\nRemember to rotate it every quarter."),
+    # ---- 第十批：括号与中文引号包着的占位符（S6 之后的待办）----
+    ("placeholder in curly quotes after full-width colon", "token：“YOUR_API_KEY”"),
+    ("placeholder in single curly quotes", "token：‘YOUR_API_KEY’"),
+    ("placeholder wrapped twice", "token: (“YOUR_API_KEY”)"),
+    ("whole line in brackets, value in curly quotes", "（token：“YOUR_API_KEY”）"),
+    ("shell var in curly quotes", "token：“${API_TOKEN}”"),
+    ("shell default placeholder in curly quotes", "token：“${API_TOKEN:-YOUR_API_KEY}”"),
+    ("placeholder in parentheses then stop", "token: (YOUR_API_KEY)."),
+    # 成对括号不计入长度，和引号一致（引号里的值同样要 8 位以上）
+    ("short value in parentheses", "token: (Kq7x9mP)"),
+    ("short value in curly quotes", "token：“Kq7x9mP”"),
+    # 剥掉开符后，shell 默认值从哪里接着扫要算上剥掉的个数，否则会回到变量名里的 PWD:
+    ("shell default after nested parentheses", "password: (((((${DB_PWD:-YOUR_API_KEY})))))"),
 ]
+# 每一对括号、引号各两种位置：包住整个值，以及开符在字段名前面
+_PAIRS = ("()", "（）", "[]", "［］", "「」", "『』", "【】", "“”", "‘’", "《》", "〔〕", "〈〉", "｛｝")
+NEGATIVES += [("placeholder wrapped in " + p, "token: " + p[0] + "YOUR_API_KEY" + p[1]) for p in _PAIRS]
+NEGATIVES += [("line wrapped in " + p, p[0] + "token: YOUR_API_KEY" + p[1]) for p in _PAIRS]
